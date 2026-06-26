@@ -1,0 +1,34 @@
+# Backend ranh thửa: PostGIS + FastAPI.
+# Chạy: docker compose up --build
+# Sau khi db sẵn sàng, import dữ liệu: docker compose run --rm api python import_shp.py
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: ranhthua
+      POSTGRES_USER: ranhthua
+      POSTGRES_PASSWORD: ranhthua
+    ports:
+      - '5433:5432' # 5433 ngoài để tránh đụng Postgres local (nếu có)
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ranhthua -d ranhthua']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://ranhthua:ranhthua@db:5432/ranhthua
+    ports:
+      - '8000:8000'
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./_shp_seed:/app/_shp_seed:ro # shapefile seed (mount read-only)
+
+volumes:
+  pgdata:

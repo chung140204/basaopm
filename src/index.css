@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+      sans-serif;
+  }
+  body {
+    @apply bg-app text-ink-secondary antialiased;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Leaflet mặc định đặt z-index cao (panes 200–700, controls 1000) khiến bản đồ
+   đè lên topbar/toolbar của app. Khống chế toàn bộ về thang thấp + tạo
+   stacking context riêng để map không bao giờ phủ lên UI bên ngoài. */
+.leaflet-container {
+  position: relative;
+  z-index: 0;
+}
+.leaflet-pane,
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 1;
+}
+.leaflet-control {
+  z-index: 2;
+}
