@@ -270,9 +270,9 @@ export default function MapScreen({ showToast }) {
       <div className="relative flex-1 overflow-hidden isolate">
         <MapCanvas
           features={cells}
-          // TẠM THỜI: vẽ polygon ô tĩnh (CELLS) có màu trạng thái khi KHÔNG
-          // dùng lớp ranh thửa (cần backend). Bật ranh thửa → ẩn lớp tĩnh.
-          showCells={!showRanhThua}
+          // Lớp ô tĩnh (CELLS) đã tắt hẳn — bản đồ chỉ dùng nền + ranh phân khu
+          // (và lớp ranh thửa thật từ backend khi bật).
+          showCells={false}
           activeLayerId={activeLayerId}
           colorResolver={colorResolver}
           filterPredicate={filterPredicate}

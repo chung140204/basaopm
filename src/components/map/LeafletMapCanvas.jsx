@@ -17,6 +17,7 @@ import {
 } from '../../services/planningApi';
 import { getLayer } from './layers';
 import { statusValue, isProvisional } from './ranhThuaMock';
+import { applyDcb02Overlay } from '../../data/dcb02Overlay';
 import {
   RANH_THUA_SUBDIVISIONS,
   RANH_THUA_DIVIDER,
@@ -280,7 +281,9 @@ export default function LeafletMapCanvas({
       // Tải geojson cả lớp; việc VẼ + tô màu + lọc làm ở effect 3d riêng.
       getRanhThuaGeoJSON(best.id).then((geojson) => {
         if (cancelled) return;
-        ranhThuaDataRef.current = geojson;
+        // Phủ dữ liệu nghiệp vụ DCB02 (tĩnh, từ Excel) lên feature ranh thửa
+        // thật để tô màu trạng thái — không cần backend ghi meta.
+        ranhThuaDataRef.current = applyDcb02Overlay(geojson);
         setRanhThuaDataVer((v) => v + 1); // báo effect 3d vẽ lại
       });
     });
