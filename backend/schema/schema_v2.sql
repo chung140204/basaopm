@@ -71,6 +71,7 @@ CREATE TABLE subdivision (
     id            serial PRIMARY KEY,
     lot_code      text NOT NULL,                  -- 'DCB02','DCB09' (business key)
     name          text,
+    zone          text,                           -- 'khu-a' | 'khu-b' (phân khu dự án)
     lo_layer_id   text,                           -- liên kết lỏng tới lo.layer_id (resolve runtime)
     description   text,
     note          text,

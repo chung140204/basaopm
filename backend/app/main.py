@@ -325,12 +325,13 @@ def _row_to_cell(r: tuple) -> dict:
     (cid, cell_code, lot_code, subdivision_id, cell_no, has_geom, cx, cy,
      owner, address, area, planning, biz, book, book_no, constr,
      density, fmin, fmax, value, paid, remaining, pay, collateral,
-     internal_legal, description, note) = r
+     internal_legal, description, note, zone) = r
     return {
         "id": cid,
         "cellCode": cell_code,
         "lotCode": lot_code,
         "subdivisionId": subdivision_id,
+        "zone": zone,
         "cellNo": cell_no,
         "hasGeom": has_geom,
         "centroid": [cx, cy] if cx is not None else None,
@@ -364,7 +365,7 @@ _CELL_COLS = """
     c.business_status, c.book_status, c.book_no, c.construction_status,
     c.build_density, c.build_floor_min, c.build_floor_max,
     c.value, c.paid_value, c.remaining_value, c.payment_status,
-    c.collateral_status, c.internal_legal, c.description, c.note
+    c.collateral_status, c.internal_legal, c.description, c.note, s.zone
 """
 
 
@@ -437,6 +438,7 @@ def cells_geojson(lot: str | None = Query(default=None)):
                     'cellCode', c.cell_code,
                     'lotCode', s.lot_code,
                     'subdivisionId', s.lot_code,
+                    'ranhThuaId', c.ranh_thua_id,
                     'area', c.area,
                     'centroid', json_build_array(ST_X(c.centroid), ST_Y(c.centroid)),
                     'businessStatus', c.business_status,

@@ -1,44 +1,43 @@
 # basaopm-demo
 
 Demo nền tảng quản lý & trình diễn bất động sản (BĐS) theo ô / thửa đất.
-Frontend dựng bằng **React + Vite + TailwindCSS**, bản đồ dùng **Leaflet**,
-biểu đồ dùng **Recharts**. Backend (thư mục `backend/`) là dịch vụ **Python**
-phục vụ dữ liệu ranh thửa (vector + tile XYZ), đóng gói bằng Docker.
+Dự án gồm hai phần tách biệt trong cùng một repo (monorepo):
 
-## Yêu cầu
+| Thư mục     | Vai trò   | Công nghệ                                     |
+| ----------- | --------- | --------------------------------------------- |
+| `frontend/` | Giao diện | React + Vite + TailwindCSS, Leaflet, Recharts |
+| `backend/`  | Dịch vụ   | Python (ranh thửa: vector + tile XYZ), Docker |
+| `docs/`     | Tài liệu  | Tài liệu API + screenshots                    |
 
-- Node.js 18+
-- (Tùy chọn) Docker — để chạy backend ranh thửa cục bộ
+## Bắt đầu nhanh
 
-## Cài đặt & chạy frontend
+### Frontend
 
 ```bash
+cd frontend
 npm install
-cp .env.example .env   # rồi điền các biến môi trường cần thiết
+cp .env.example .env   # điền các biến môi trường cần thiết
 npm run dev            # chạy dev server (Vite)
-npm run build          # build production vào dist/
-npm run preview        # xem thử bản build
 ```
 
-## Biến môi trường
+Chi tiết: xem [`frontend/README.md`](frontend/README.md).
 
-Xem `.env.example` để biết danh sách biến. Các biến chính:
+### Backend
 
-- `VITE_GOOGLE_MAPS_API_KEY` — Google Maps JavaScript API key.
-- `VITE_API_URL_PLANNING_TILE` — endpoint tile XYZ ranh thửa (nền).
-- `VITE_API_URL_RANH_THUA` — backend ranh thửa (vector: polyline + click).
+```bash
+cd backend
+docker compose up      # chạy bằng Docker
+```
 
-> File `.env` chứa cấu hình cục bộ và **không** được commit lên git.
+Chi tiết: xem [`backend/README.md`](backend/README.md).
 
-## Cấu trúc
+## Cấu trúc repo
 
 ```
-src/
-  components/   # auth, cell, dashboard, data, info, lot, map, welcome
-  data/         # dữ liệu mẫu (geojson, json)
-  hooks/        # React hooks
-  services/     # gọi API
-  utils/        # tiện ích
-backend/        # dịch vụ Python phục vụ ranh thửa (xem backend/README.md)
-docs/           # tài liệu API + screenshots
+frontend/   # ứng dụng React (FE)
+backend/    # dịch vụ Python phục vụ ranh thửa (BE)
+docs/       # tài liệu API + screenshots
 ```
+
+Frontend gọi backend qua biến môi trường `VITE_API_URL_RANH_THUA`
+(xem `frontend/.env.example`).

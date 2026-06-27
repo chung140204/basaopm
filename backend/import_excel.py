@@ -9,7 +9,7 @@ Nguồn:
 
 Đặc điểm:
   - Excel là NGUỒN nghiệp vụ chính. cell_code ('DCB02-01') = business key.
-  - DCB02: map geom thật qua ID_BY_OTO (tái dùng từ apply_dcb02.py).
+  - DCB02: map geom thật qua ID_BY_OTO (bảng mapping đã căn tay, nhúng bên dưới).
   - DCB09: chưa có mapping geom → ranh_thua_id=NULL, centroid=NULL.
   - Idempotent: xoá sạch dữ liệu nghiệp vụ (TRUNCATE) rồi nạp lại. KHÔNG đụng ranh_thua/lo.
 
@@ -38,7 +38,7 @@ F_HD = os.environ.get("F_HD", "hd.xlsx")
 F_PL = os.environ.get("F_PL", "phaply.xlsx")
 F_THA = os.environ.get("F_THA", "tha.xlsx")
 
-# --- Geom mapping DCB02: mã ô (STT) → ranh_thua.id (từ apply_dcb02.py, đã căn tay)
+# --- Geom mapping DCB02: mã ô (STT) → ranh_thua.id (căn tay theo centroid + diện tích)
 DCB02_ID_BY_OTO = {
     1: 1339, 2: 1290, 3: 1291, 4: 1292, 5: 1293, 6: 1294, 7: 1340,
     8: 1323, 9: 1324, 10: 1325, 11: 1326,
@@ -165,11 +165,13 @@ def main():
         # 1) SUBDIVISION (2 lô). lo_layer_id = layer của geom; lo cụ thể không
         #    có loCode='DCB09' nên để layer_id chung; DCB02 geom ở lo id=33.
         lots = {}
+        # zone: phân khu của lô (DCB02/DCB09 đều thuộc Khu B).
+        ZONE_BY_LOT = {"DCB02": "khu-b", "DCB09": "khu-b"}
         for code in ["DCB02", "DCB09"]:
             cur.execute(
-                "INSERT INTO subdivision (lot_code, name, lo_layer_id) "
-                "VALUES (%s,%s,%s) RETURNING id",
-                (code, f"Lô {code}", "truonglinh-chialo"),
+                "INSERT INTO subdivision (lot_code, name, zone, lo_layer_id) "
+                "VALUES (%s,%s,%s,%s) RETURNING id",
+                (code, f"Lô {code}", ZONE_BY_LOT.get(code), "truonglinh-chialo"),
             )
             lots[code] = cur.fetchone()[0]
 
