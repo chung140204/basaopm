@@ -4,12 +4,21 @@ Hướng dẫn dựng PostGIS + nạp toàn bộ dữ liệu cho backend ranh th
 Dữ liệu nằm trong volume `pgdata` của Docker (KHÔNG nằm trong git) — khi clone
 repo về máy mới, làm theo các bước dưới để tái tạo.
 
+> ⚠️ **LƯU Ý: dữ liệu nguồn đã được gỡ khỏi repo.**
+> Hai thư mục `_shp_seed/` (shapefile) và `_excel/` (4 file Excel) đã bị xoá khỏi
+> dự án (DB hiện hành đã nạp xong, dữ liệu sống trong volume `pgdata`).
+> Quy trình dưới đây CHỈ chạy lại được nếu bạn khôi phục 2 nguồn này trước:
+> - Lấy `TruongLinh_Chialo.shp` (+ .dbf/.prj/.shx) đặt vào `backend/_shp_seed/`.
+> - Lấy 4 file Excel nghiệp vụ, đổi tên ASCII, đặt vào `backend/_excel/`.
+> - Thêm lại mount trong `docker-compose.yml` (dòng `./_shp_seed:/app/_shp_seed:ro`)
+>   HOẶC copy thủ công vào container như bước 2/5.
+
 ## Yêu cầu
 
 - Docker Desktop
-- 5 nguồn dữ liệu:
-  - `_shp_seed/TruongLinh_Chialo.shp` (+ .dbf/.prj/.shx) — đã có trong repo
-  - 4 file Excel nghiệp vụ (KHÔNG commit vào repo, lấy từ nguồn dự án):
+- 5 nguồn dữ liệu (đã gỡ khỏi repo — xem lưu ý ở trên):
+  - `_shp_seed/TruongLinh_Chialo.shp` (+ .dbf/.prj/.shx)
+  - 4 file Excel nghiệp vụ:
     - `Data tổng theo ô.xlsx`
     - `Data theo HĐ giao dịch.xlsx`
     - `Data theo tình trạng pháp lý tài chính.xlsx`

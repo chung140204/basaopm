@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { X, Layers as LayersIcon, Pencil, Check, Loader2 } from 'lucide-react';
 import { getLoDetail, saveLoMeta } from '../../services/planningApi';
 import { zoneOfLot, zoneName } from '../../data/cells';
+import ResponsiveSidePanel from '../common/ResponsiveSidePanel';
 
 function fmtArea(v) {
   if (v == null) return '—';
@@ -34,12 +35,6 @@ export default function LoPanel({ loId, onClose, onPickCell, showToast }) {
     };
   }, [loId]);
 
-  useEffect(() => {
-    const h = (e) => e.key === 'Escape' && !editing && onClose();
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [onClose, editing]);
-
   const meta = editing ? draft : lo?.meta || {};
   const setField = (k, v) => setDraft((d) => ({ ...d, [k]: v }));
 
@@ -57,7 +52,10 @@ export default function LoPanel({ loId, onClose, onPickCell, showToast }) {
   };
 
   return (
-    <div className="flex h-full w-[360px] flex-shrink-0 flex-col border-l border-line bg-surface-1">
+    <ResponsiveSidePanel
+      onClose={() => !editing && onClose()}
+      widthClass="md:w-[360px]"
+    >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <div className="flex items-center gap-2">
@@ -223,7 +221,7 @@ export default function LoPanel({ loId, onClose, onPickCell, showToast }) {
           </div>
         </>
       )}
-    </div>
+    </ResponsiveSidePanel>
   );
 }
 

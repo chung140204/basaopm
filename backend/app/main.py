@@ -40,15 +40,8 @@ def health():
 
 
 # =====================================================================
-# AUTH — đăng ký / đăng nhập / phân quyền
+# AUTH — đăng nhập / phân quyền
 # =====================================================================
-class RegisterIn(BaseModel):
-    email: str
-    password: str
-    fullName: str | None = None
-    role: str | None = None  # chỉ superadmin mới được chỉ định role khi tạo
-
-
 class LoginIn(BaseModel):
     email: str
     password: str
@@ -68,30 +61,6 @@ def auth_meta():
         ],
         "permissions": A.PERMISSIONS,
     }
-
-
-@app.post("/api/auth/register")
-def register(body: RegisterIn):
-    email = (body.email or "").strip()
-    if not email or not body.password:
-        raise HTTPException(status_code=400, detail="Thiếu email hoặc mật khẩu")
-    if len(body.password) < 6:
-        raise HTTPException(status_code=400, detail="Mật khẩu tối thiểu 6 ký tự")
-    # Đăng ký công khai LUÔN tạo role mặc định (an toàn); chỉ superadmin đổi sau.
-    role = A.DEFAULT_ROLE
-    with get_conn() as conn, conn.cursor() as cur:
-        if A.get_user_by_email(cur, email):
-            raise HTTPException(status_code=409, detail="Email đã tồn tại")
-        cur.execute(
-            "INSERT INTO app_user (email, full_name, password_hash, role) "
-            "VALUES (%s,%s,%s,%s) RETURNING id, email, full_name, role, is_active",
-            (email, body.fullName, A.hash_password(body.password), role),
-        )
-        row = cur.fetchone()
-        conn.commit()
-    user = A._row_to_user(row)
-    token = A.make_token(user["id"], user["role"])
-    return {"token": token, "user": user}
 
 
 @app.post("/api/auth/login")

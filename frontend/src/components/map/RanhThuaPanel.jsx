@@ -4,6 +4,7 @@ import { labelFor, getLayer } from '../../lib/layers';
 import { formatCurrency, formatDate } from '../../utils/format';
 import { saveRanhThuaMeta } from '../../services/planningApi';
 import { mockStatusFor } from './ranhThuaStatus';
+import ResponsiveSidePanel from '../common/ResponsiveSidePanel';
 import {
   paymentProgress,
   paymentMethodLabel,
@@ -168,13 +169,6 @@ export default function RanhThuaPanel({ plot, onClose, onSaved, showToast }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plotId]);
 
-  // ESC để đóng (khi không đang sửa).
-  useEffect(() => {
-    const h = (e) => e.key === 'Escape' && !editing && onClose();
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [onClose, editing]);
-
   const startEdit = () => {
     setDraft(meta);
     setEditing(true);
@@ -199,7 +193,10 @@ export default function RanhThuaPanel({ plot, onClose, onSaved, showToast }) {
   const m = editing ? draft : meta;
 
   return (
-    <div className="flex h-full w-[360px] flex-shrink-0 flex-col border-l border-line bg-surface-1">
+    <ResponsiveSidePanel
+      onClose={() => !editing && onClose()}
+      widthClass="md:w-[360px]"
+    >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <div className="flex items-center gap-2">
@@ -296,7 +293,6 @@ export default function RanhThuaPanel({ plot, onClose, onSaved, showToast }) {
                     <Row label="Mô tả">{m.description || '—'}</Row>
                   </>
                 )}
-                <Row label="Số thửa">{props.So_thua ?? '—'}</Row>
                 <Row label="Diện tích (đo)">{fmtArea(displayArea)}</Row>
                 {/* Tạm ẩn Chiều dài / Chiều rộng theo yêu cầu. */}
                 {center && (
@@ -460,7 +456,7 @@ export default function RanhThuaPanel({ plot, onClose, onSaved, showToast }) {
           </div>
         </>
       )}
-    </div>
+    </ResponsiveSidePanel>
   );
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, LogOut, Shield } from 'lucide-react';
+import { Bell, LogOut, Shield, Menu } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 
 // Chữ cái đầu cho avatar (tối đa 2 ký tự).
@@ -10,7 +10,7 @@ function initials(name = '') {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export default function Topbar({ title = 'Quản lý dự án' }) {
+export default function Topbar({ title = 'Quản lý dự án', onMenuClick }) {
   const { user, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -27,8 +27,18 @@ export default function Topbar({ title = 'Quản lý dự án' }) {
   const name = user?.fullName || user?.email || 'Người dùng';
 
   return (
-    <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-line bg-surface-1 px-6">
-      <h1 className="truncate text-sm font-medium text-ink-secondary">{title}</h1>
+    <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-line bg-surface-1 px-4 md:px-6">
+      <div className="flex min-w-0 items-center gap-2">
+        <button
+          type="button"
+          onClick={onMenuClick}
+          aria-label="Mở menu"
+          className="-ml-1 rounded-md p-2 text-ink-secondary hover:bg-surface-2 md:hidden"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <h1 className="truncate text-sm font-medium text-ink-secondary">{title}</h1>
+      </div>
 
       <div className="flex flex-shrink-0 items-center gap-3">
         <button

@@ -153,7 +153,7 @@ export default function DashboardScreen({ project }) {
   const pieTotal = m.daBanCoSo.total + m.daBanChuaSo.total + m.chuaBan.total;
 
   return (
-    <main className="flex-1 overflow-y-auto bg-app p-6">
+    <main className="flex-1 overflow-y-auto bg-app p-4 md:p-6">
       {/* Header */}
       <div className="mb-6">
         <h2 className="text-2xl font-semibold text-ink-primary">Dashboard</h2>

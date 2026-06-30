@@ -13,7 +13,7 @@ import CellDetailPanel from './CellDetailPanel';
 import EditCellModal from './EditCellModal';
 import DiscardDialog from './DiscardDialog';
 import { makeColorResolver } from '../../lib/layers';
-import { CELLS, SUBDIVISIONS, TOTAL_CELLS, FULL_BBOX } from '../../data/cells';
+import { CELLS, SUBDIVISIONS, TOTAL_CELLS } from '../../data/cells';
 import { getRanhThuaAt, getRanhThuaLayers } from '../../services/planningApi';
 import { saveCell } from '../../services/cellsApi';
 import { useDbCells } from '../../hooks/useDbCells';
@@ -68,7 +68,6 @@ export default function MapScreen({ showToast }) {
   // với màn "Quản lý theo ô" để 2 màn cùng nguồn data.
   const [cells, setCells] = useDbCells(CELLS);
   const [activeLayerId, setActiveLayerId] = useState('business');
-  const [showBorders, setShowBorders] = useState(false);
   // TẠM THỜI: mặc định TẮT lớp ranh thửa (cần backend PostGIS) để bản đồ vẽ
   // lớp ô tĩnh (CELLS) có màu trạng thái ngay, không phụ thuộc backend.
   // Ranh thửa BẬT sẵn khi vào bản đồ (layer tự chọn trong LeafletMapCanvas);
@@ -278,7 +277,7 @@ export default function MapScreen({ showToast }) {
           colorResolver={colorResolver}
           filterPredicate={filterPredicate}
           selectedFeatureId={selectedId}
-          showSubdivisionBorders={showBorders}
+          showSubdivisionBorders={false}
           subdivisions={SUBDIVISIONS}
           focusTarget={focusTarget}
           hideUnmatched={hideUnmatched}
@@ -291,7 +290,7 @@ export default function MapScreen({ showToast }) {
               : 'business'
           }
           ranhThuaFilter={hideUnmatched ? ranhThuaFilter : null}
-          showRanhThuaSubdivisions={showBorders}
+          showRanhThuaSubdivisions={false}
           showLo={showLo}
           selectedLoId={selectedLoId}
           onLoClick={(id) => {
@@ -310,9 +309,6 @@ export default function MapScreen({ showToast }) {
             onLayerChange={setActiveLayerId}
             onToggleFilter={() => setFilterOpen((o) => !o)}
             activeFilterCount={activeFilterCount}
-            onFit={() => setFocusTarget({ bbox: FULL_BBOX })}
-            showBorders={showBorders}
-            onToggleBorders={() => setShowBorders((s) => !s)}
             showRanhThua={showRanhThua}
             onToggleRanhThua={() => setShowRanhThua((s) => !s)}
             showLoThua={showLoThua}
@@ -347,8 +343,8 @@ export default function MapScreen({ showToast }) {
           </div>
         </div>
 
-        {/* Legend (bottom-left) */}
-        <div className="pointer-events-none absolute bottom-4 left-4 z-[500]">
+        {/* Legend (bottom-left) — ẩn trên mobile để bottom-sheet không bị che */}
+        <div className="pointer-events-none absolute bottom-4 left-4 z-[500] hidden sm:block">
           <MapLegend activeLayerId={activeLayerId} features={matched} />
         </div>
 

@@ -27,8 +27,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - ./_shp_seed:/app/_shp_seed:ro # shapefile seed (mount read-only)
 
 volumes:
   pgdata:

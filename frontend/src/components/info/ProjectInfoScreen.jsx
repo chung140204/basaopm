@@ -36,7 +36,7 @@ export default function ProjectInfoScreen({ project, onSave, onHide, onRestore }
   const isHidden = project.status === 'hidden';
 
   return (
-    <main className="flex-1 overflow-y-auto bg-app p-6">
+    <main className="flex-1 overflow-y-auto bg-app p-4 md:p-6">
       {/* Header */}
       <div className="mb-6 flex items-start justify-between">
         <div>

@@ -3,6 +3,7 @@ import { X, Pin, ChevronDown, RotateCcw } from 'lucide-react';
 import { LAYERS } from '../../lib/layers';
 import { SUBDIVISIONS } from '../../data/cells';
 import { formatInteger } from '../../utils/format';
+import ResponsiveSidePanel from '../common/ResponsiveSidePanel';
 
 // Filter groups derive from layer definitions (business/legal/payment) plus
 // subdivision. Each group is multi-select. All-selected within a group = no
@@ -87,7 +88,7 @@ export default function FilterPanel({
   onClose,
 }) {
   return (
-    <div className="flex h-full w-[300px] flex-shrink-0 flex-col border-l border-line bg-surface-1">
+    <ResponsiveSidePanel onClose={onClose} widthClass="md:w-[300px]">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <span className="text-sm font-semibold text-ink-primary">
@@ -156,7 +157,7 @@ export default function FilterPanel({
           Đặt lại bộ lọc
         </button>
       </div>
-    </div>
+    </ResponsiveSidePanel>
   );
 }
 

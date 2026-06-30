@@ -44,7 +44,7 @@ function NavItem({ item, active, onNavigate }) {
 
 export default function Sidebar({ project, activeKey, onNavigate, onBack }) {
   return (
-    <aside className="flex w-60 flex-shrink-0 flex-col bg-sidebar-bg">
+    <aside className="flex h-full w-60 flex-shrink-0 flex-col bg-sidebar-bg">
       {/* Brand */}
       <div className="flex h-14 items-center gap-2 px-5">
         <div className="flex h-8 w-8 items-center justify-center rounded-md bg-accent-600 text-sm font-bold text-white">

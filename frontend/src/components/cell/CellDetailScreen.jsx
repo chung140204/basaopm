@@ -290,7 +290,7 @@ export default function CellDetailScreen({ feature, defaultTab = 'legal', onBack
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6">
         <div className="mx-auto max-w-4xl">
           {status === 'loading' && (
             <div className="mb-4 flex items-center gap-2 rounded-md border border-line bg-surface-2 px-4 py-2.5 text-sm text-ink-muted">

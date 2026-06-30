@@ -361,7 +361,7 @@ export default function WelcomeScreen({
       </header>
 
       {/* Content */}
-      <main className="mx-auto max-w-6xl px-6 py-10">
+      <main className="mx-auto max-w-6xl px-4 py-6 md:px-6 md:py-10">
         {/* Greeting */}
         <div className="mb-8">
           <h1 className="text-3xl font-semibold text-ink-primary">

@@ -2,8 +2,6 @@ import { useState } from 'react';
 import {
   Layers,
   SlidersHorizontal,
-  Maximize2,
-  Spline,
   Check,
   Map as MapIcon,
   Grid3x3,
@@ -16,9 +14,6 @@ export default function MapToolbar({
   onLayerChange,
   onToggleFilter,
   activeFilterCount,
-  onFit,
-  showBorders,
-  onToggleBorders,
   showRanhThua,
   onToggleRanhThua,
   showLoThua,
@@ -81,32 +76,6 @@ export default function MapToolbar({
             {activeFilterCount}
           </span>
         )}
-      </button>
-
-      {/* Fit */}
-      <button
-        type="button"
-        onClick={onFit}
-        title="Xem toàn cảnh"
-        aria-label="Xem toàn cảnh"
-        className="flex items-center gap-2 rounded-[6px] px-3 py-1.5 text-sm font-medium text-ink-secondary hover:bg-surface-2"
-      >
-        <Maximize2 className="h-4 w-4" />
-        <span className="hidden md:inline">Toàn cảnh</span>
-      </button>
-
-      {/* Subdivision borders toggle */}
-      <button
-        type="button"
-        onClick={onToggleBorders}
-        aria-pressed={showBorders}
-        title="Hiện/ẩn ranh phân khu"
-        className={`flex items-center gap-2 rounded-[6px] px-3 py-1.5 text-sm font-medium hover:bg-surface-2 ${
-          showBorders ? 'text-accent-700' : 'text-ink-muted'
-        }`}
-      >
-        <Spline className="h-4 w-4" />
-        <span className="hidden md:inline">Ranh khu</span>
       </button>
 
       <span className="h-5 w-px bg-line" />

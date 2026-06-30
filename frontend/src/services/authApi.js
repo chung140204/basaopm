@@ -25,15 +25,6 @@ export async function apiLogin(email, password) {
   return jsonOrThrow(res); // { token, user }
 }
 
-export async function apiRegister(email, password, fullName) {
-  const res = await fetch(`${API}/api/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, fullName }),
-  });
-  return jsonOrThrow(res); // { token, user }
-}
-
 export async function apiMe(token) {
   const res = await fetch(`${API}/api/auth/me`, {
     headers: { Authorization: `Bearer ${token}` },

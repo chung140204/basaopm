@@ -1,13 +1,8 @@
 // Auth context: giữ token + user hiện tại, lưu localStorage (sống qua F5).
-// Cung cấp login/register/logout + can(permission) để gating UI theo role.
+// Cung cấp login/logout + can(permission) để gating UI theo role.
 // Bản đồ quyền lấy từ backend (/api/auth/meta) → FE không hardcode role.
 import { createContext, useContext, useEffect, useState } from 'react';
-import {
-  apiLogin,
-  apiRegister,
-  apiMe,
-  apiAuthMeta,
-} from '../services/authApi';
+import { apiLogin, apiMe, apiAuthMeta } from '../services/authApi';
 
 const AuthContext = createContext(null);
 const TOKEN_KEY = 'bpm.token';
@@ -67,12 +62,6 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
-  // Đăng ký KHÔNG tự đăng nhập: tạo tài khoản xong, người dùng tự đăng nhập lại.
-  const register = async (email, password, fullName) => {
-    const data = await apiRegister(email, password, fullName);
-    return data.user;
-  };
-
   const logout = () => {
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
@@ -93,7 +82,6 @@ export function AuthProvider({ children }) {
     isAuthed: !!user,
     roles: roleMap,
     login,
-    register,
     logout,
     can,
   };

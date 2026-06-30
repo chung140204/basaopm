@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
 import { X, Pencil, Maximize2, Grid3x3, MapPin, ChevronRight } from 'lucide-react';
 import LotShape from './LotShape';
 import { AreaBreakdownList } from './AreaBreakdownBar';
 import { labelFor, getLayer } from '../../lib/layers';
 import { formatM2 } from '../../utils/format';
+import ResponsiveSidePanel from '../common/ResponsiveSidePanel';
 
 function colorOf(layerId, value) {
   return getLayer(layerId).statuses.find((s) => s.value === value)?.fill ?? '#94A3B8';
@@ -22,14 +22,8 @@ function Stat({ icon: Icon, label, value }) {
 }
 
 export default function LotDetailPanel({ lot, onClose, onEdit, onOpenCell }) {
-  useEffect(() => {
-    const h = (e) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [onClose]);
-
   return (
-    <div className="flex h-full w-[380px] flex-shrink-0 flex-col border-l border-line bg-surface-1">
+    <ResponsiveSidePanel onClose={onClose} widthClass="md:w-[380px]">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <div>
@@ -174,6 +168,6 @@ export default function LotDetailPanel({ lot, onClose, onEdit, onOpenCell }) {
           Cập nhật thông tin lô
         </button>
       </div>
-    </div>
+    </ResponsiveSidePanel>
   );
 }

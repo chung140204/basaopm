@@ -68,6 +68,59 @@ function ColumnPicker({ visible, onToggle }) {
   );
 }
 
+// Tra cột theo key → tái dùng col.render(p) cho card mobile (dot màu nhất quán
+// với table). Card cố định các trường chính, không phụ thuộc column picker.
+const COL_BY_KEY = Object.fromEntries(CELL_COLUMNS.map((c) => [c.key, c]));
+const MOBILE_CARD_FIELDS = [
+  'area',
+  'value',
+  'businessStatus',
+  'collateralStatus',
+  'paymentStatus',
+];
+
+// 1 trường trong card mobile: nhãn nhỏ + giá trị (render từ CELL_COLUMNS).
+function CardField({ colKey, p }) {
+  const col = COL_BY_KEY[colKey];
+  if (!col) return null;
+  return (
+    <div className="flex flex-col">
+      <span className="text-[11px] uppercase tracking-wide text-ink-muted">
+        {col.label}
+      </span>
+      <span className="text-ink-secondary">{col.render(p)}</span>
+    </div>
+  );
+}
+
+// Thẻ ô cho mobile (thay hàng bảng). Click → mở chi tiết như khi bấm hàng.
+function MobileCellCard({ cell, active, onClick }) {
+  const p = cell.properties;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex w-full flex-col gap-2 rounded-lg border p-3 text-left shadow-sm transition-colors ${
+        active
+          ? 'border-accent-200 bg-accent-50'
+          : 'border-line bg-surface-1 hover:bg-surface-2'
+      }`}
+    >
+      {/* Hàng đầu: Mã ô (đậm) + Mã lô */}
+      <div className="flex items-center justify-between gap-2">
+        {COL_BY_KEY.cellCode.render(p)}
+        <span className="text-xs text-ink-muted">{p.lotCode ?? '—'}</span>
+      </div>
+      {/* Các trường chính dạng lưới 2 cột */}
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+        {MOBILE_CARD_FIELDS.map((k) => (
+          <CardField key={k} colKey={k} p={p} />
+        ))}
+      </div>
+    </button>
+  );
+}
+
 // Screen for "Quản lý theo ô": a filterable cell list. Clicking a row opens
 // the full-screen cell detail (with Pháp lý / Giao dịch tabs).
 export default function CellListScreen({ initialCellCode, onConsumeInitial }) {
@@ -145,7 +198,7 @@ export default function CellListScreen({ initialCellCode, onConsumeInitial }) {
       {/* List + filters */}
       <main className="flex min-w-0 flex-1 flex-col">
         {/* Filter bar */}
-        <div className="flex flex-wrap items-center gap-3 border-b border-line bg-surface-1 px-6 py-3">
+        <div className="flex flex-wrap items-center gap-3 border-b border-line bg-surface-1 px-4 py-3 md:px-6">
           <div className="flex items-center gap-1 rounded-md bg-surface-2 p-0.5">
             {[{ id: 'all', name: 'Tất cả' }, ...ZONES].map((z) => (
               <button
@@ -180,24 +233,46 @@ export default function CellListScreen({ initialCellCode, onConsumeInitial }) {
             ))}
           </select>
 
-          <div className="relative ml-auto">
+          <div className="relative w-full sm:ml-auto sm:w-56">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Tìm mã ô / mã lô…"
-              className="w-56 rounded-md border border-line bg-surface-1 py-1.5 pl-8 pr-3 text-sm text-ink-primary placeholder:text-ink-muted focus:border-accent-500 focus:outline-none"
+              className="w-full rounded-md border border-line bg-surface-1 py-1.5 pl-8 pr-3 text-sm text-ink-primary placeholder:text-ink-muted focus:border-accent-500 focus:outline-none"
             />
           </div>
 
-          <ColumnPicker visible={visibleCols} onToggle={toggleCol} />
+          {/* Cột tuỳ biến — chỉ áp cho table desktop; card mobile cố định trường */}
+          <div className="hidden md:block">
+            <ColumnPicker visible={visibleCols} onToggle={toggleCol} />
+          </div>
 
           <span className="text-sm text-ink-muted">{rows.length} ô</span>
         </div>
 
-        {/* Table */}
-        <div className="flex-1 overflow-auto p-6">
-          <div className="overflow-hidden rounded-lg border border-line bg-surface-1">
+        {/* List: card trên mobile, table trên desktop */}
+        <div className="flex-1 overflow-auto p-4 md:p-6">
+          {/* Card list — chỉ mobile (<md) */}
+          <div className="space-y-3 md:hidden">
+            {rows.length === 0 ? (
+              <p className="py-10 text-center text-ink-muted">
+                Không có ô nào khớp bộ lọc.
+              </p>
+            ) : (
+              rows.map((c) => (
+                <MobileCellCard
+                  key={c.id}
+                  cell={c}
+                  active={c.id === selectedId}
+                  onClick={() => setSelectedId(c.id)}
+                />
+              ))
+            )}
+          </div>
+
+          {/* Table — chỉ desktop (md+) */}
+          <div className="hidden overflow-hidden rounded-lg border border-line bg-surface-1 md:block">
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10">
                 <tr className="border-b border-line bg-surface-2 text-left text-xs uppercase tracking-wide text-ink-muted">

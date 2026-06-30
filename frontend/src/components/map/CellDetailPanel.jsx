@@ -8,6 +8,7 @@ import {
   formatDate,
 } from '../../utils/format';
 import { getCellDetail } from '../../services/cellsApi';
+import ResponsiveSidePanel from '../common/ResponsiveSidePanel';
 
 const TABS = [
   { key: 'identity', label: 'Định danh' },
@@ -95,15 +96,8 @@ export default function CellDetailPanel({ feature, onClose, onEdit }) {
     };
   }, [p.cellCode]);
 
-  // ESC to close.
-  useEffect(() => {
-    const h = (e) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [onClose]);
-
   return (
-    <div className="flex h-full w-[360px] flex-shrink-0 flex-col border-l border-line bg-surface-1">
+    <ResponsiveSidePanel onClose={onClose} widthClass="md:w-[360px]">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <div>
@@ -341,6 +335,6 @@ export default function CellDetailPanel({ feature, onClose, onEdit }) {
           Cập nhật thông tin ô
         </button>
       </div>
-    </div>
+    </ResponsiveSidePanel>
   );
 }

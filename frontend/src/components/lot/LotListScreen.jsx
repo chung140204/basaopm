@@ -109,7 +109,7 @@ export default function LotListScreen({ showToast, onOpenCell }) {
     <div className="flex flex-1 overflow-hidden bg-app">
       <main className="flex min-w-0 flex-1 flex-col">
         {/* Filter bar */}
-        <div className="flex flex-wrap items-center gap-3 border-b border-line bg-surface-1 px-6 py-3">
+        <div className="flex flex-wrap items-center gap-3 border-b border-line bg-surface-1 px-4 py-3 md:px-6">
           <div className="flex items-center gap-1 rounded-md bg-surface-2 p-0.5">
             {[{ id: 'all', name: 'Tất cả' }, ...ZONES].map((z) => (
               <button
@@ -127,13 +127,13 @@ export default function LotListScreen({ showToast, onOpenCell }) {
             ))}
           </div>
 
-          <div className="relative ml-auto">
+          <div className="relative w-full sm:ml-auto sm:w-48">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Tìm mã lô…"
-              className="w-48 rounded-md border border-line bg-surface-1 py-1.5 pl-8 pr-3 text-sm text-ink-primary placeholder:text-ink-muted focus:border-accent-500 focus:outline-none"
+              className="w-full rounded-md border border-line bg-surface-1 py-1.5 pl-8 pr-3 text-sm text-ink-primary placeholder:text-ink-muted focus:border-accent-500 focus:outline-none"
             />
           </div>
 
@@ -141,7 +141,7 @@ export default function LotListScreen({ showToast, onOpenCell }) {
         </div>
 
         {/* Grouped cards */}
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-4 md:p-6">
           {groups.length === 0 ? (
             <p className="py-10 text-center text-ink-muted">Không có lô nào khớp bộ lọc.</p>
           ) : (

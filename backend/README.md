@@ -38,10 +38,14 @@ curl "http://localhost:8000/api/ranh-thua/geojson" -o out.geojson
 
 ## Dữ liệu
 
-- Nguồn: `_shp_seed/TruongLinh_Chialo.shp` (1736 thửa, hệ VN2000).
+> ⚠️ Thư mục dữ liệu nguồn `_shp_seed/` (shapefile) và `_excel/` đã được gỡ khỏi
+> repo — DB hiện hành đã nạp xong, dữ liệu sống trong volume `pgdata`. Muốn nạp
+> lại từ đầu, khôi phục các file nguồn trước (xem [SETUP_DB.md](./SETUP_DB.md)).
+
+- Nguồn: `_shp_seed/TruongLinh_Chialo.shp` (1736 thửa, hệ VN2000) — đã gỡ khỏi repo.
 - `import_shp.py` reproject VN2000 → WGS84 (EPSG:4326) rồi nạp vào bảng `ranh_thua`
   (cột `geom` geometry 4326 + GiST index, `properties` jsonb).
-- Thay dữ liệu mới: thay file trong `_shp_seed/` rồi chạy lại lệnh import (bảng tạo lại).
+- Thay dữ liệu mới: đặt lại file vào `_shp_seed/` rồi chạy lại lệnh import (bảng tạo lại).
 
 ## Ghi chú Windows
 

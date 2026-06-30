@@ -1,7 +1,7 @@
-// Màn Đăng nhập / Đăng ký — Ethereal Glass × Editorial Split (soft-skill).
+// Màn Đăng nhập — Ethereal Glass × Editorial Split (soft-skill).
 // Nửa trái: navy hero với mesh-glow xanh/mint, serif lớn, eyebrow tag.
 // Nửa phải: glass form trong "double-bezel" card, floating-label fields,
-// segmented tabs với pill trượt mượt, CTA button-in-button. Brand: color.md
+// CTA button-in-button. Brand: color.md
 // (Navy #000D6D · Blue #003AD6 · Mint #43F0A4). Dùng AuthContext (backend thật).
 import { useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
@@ -30,45 +30,24 @@ function Field({ label, type = 'text', value, onChange, placeholder, autoFocus }
 }
 
 export default function AuthScreen() {
-  const { login, register } = useAuth();
-  const [mode, setMode] = useState('login'); // 'login' | 'register'
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
   const [err, setErr] = useState('');
-  const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
-
-  const isLogin = mode === 'login';
 
   const submit = async (e) => {
     e.preventDefault();
     setErr('');
-    setNotice('');
     setBusy(true);
     try {
-      if (isLogin) {
-        // Thành công → AuthContext set user → App tự chuyển màn.
-        await login(email.trim(), password);
-      } else {
-        // Đăng ký KHÔNG tự đăng nhập: tạo xong → về tab Đăng nhập, giữ email.
-        await register(email.trim(), password, fullName.trim());
-        setMode('login');
-        setPassword('');
-        setFullName('');
-        setNotice('Tạo tài khoản thành công. Mời đăng nhập.');
-      }
+      // Thành công → AuthContext set user → App tự chuyển màn.
+      await login(email.trim(), password);
     } catch (e2) {
       setErr(e2.message || 'Có lỗi xảy ra');
     } finally {
       setBusy(false);
     }
-  };
-
-  const switchMode = (m) => {
-    setMode(m);
-    setErr('');
-    setNotice('');
   };
 
   return (
@@ -146,57 +125,17 @@ export default function AuthScreen() {
         {/* double-bezel glass card */}
         <div className="w-full max-w-[480px] rounded-[2rem] bg-white/50 p-2 shadow-[0_30px_80px_-30px_rgba(2,10,46,0.25)] ring-1 ring-slate-900/[0.05] backdrop-blur-xl">
           <div className="rounded-[calc(2rem-0.5rem)] bg-white/90 px-7 py-9 ring-1 ring-white/60 shadow-[inset_0_1px_1px_rgba(255,255,255,0.6)] sm:px-9">
-            {/* Segmented tabs với pill trượt */}
-            <div className="relative mb-8 grid grid-cols-2 rounded-full bg-slate-900/[0.04] p-1 ring-1 ring-slate-900/[0.05]">
-              <span
-                aria-hidden
-                className="absolute inset-y-1 w-[calc(50%-0.25rem)] rounded-full bg-[#020A2E] shadow-[0_8px_24px_-6px_rgba(2,10,46,0.5)] transition-transform duration-500"
-                style={{
-                  transitionTimingFunction: EASE,
-                  transform: isLogin
-                    ? 'translateX(0.25rem)'
-                    : 'translateX(calc(100% + 0.25rem))',
-                }}
-              />
-              {[
-                { k: 'login', t: 'Đăng nhập' },
-                { k: 'register', t: 'Đăng ký' },
-              ].map((tab) => (
-                <button
-                  key={tab.k}
-                  type="button"
-                  onClick={() => switchMode(tab.k)}
-                  className={`relative z-10 rounded-full py-2 text-sm font-medium transition-colors duration-500 ${
-                    mode === tab.k ? 'text-[#EEF3FE]' : 'text-ink-secondary'
-                  }`}
-                  style={{ transitionTimingFunction: EASE }}
-                >
-                  {tab.t}
-                </button>
-              ))}
-            </div>
-
             <h2
               className="text-[2rem] leading-tight text-ink-primary"
               style={{ fontFamily: '"Playfair Display", serif' }}
             >
-              {isLogin ? 'Chào mừng trở lại' : 'Tạo tài khoản mới'}
+              Chào mừng trở lại
             </h2>
             <p className="mt-2 mb-7 text-sm text-ink-secondary">
-              {isLogin
-                ? 'Đăng nhập để tiếp tục quản lý dự án của bạn.'
-                : 'Đăng ký để bắt đầu — quyền mặc định là Admin.'}
+              Đăng nhập để tiếp tục quản lý dự án của bạn.
             </p>
 
             <form onSubmit={submit} className="space-y-4">
-              {!isLogin && (
-                <Field
-                  label="Họ và tên"
-                  value={fullName}
-                  onChange={setFullName}
-                  placeholder="Nguyễn Văn A"
-                />
-              )}
               <Field
                 label="Email"
                 type="email"
@@ -213,11 +152,6 @@ export default function AuthScreen() {
                 placeholder="••••••••"
               />
 
-              {notice && (
-                <p className="rounded-[0.9rem] bg-mint-50 px-4 py-2.5 text-sm text-mint-700 ring-1 ring-mint-500/30">
-                  {notice}
-                </p>
-              )}
               {err && (
                 <p className="rounded-[0.9rem] bg-danger-bg px-4 py-2.5 text-sm text-danger ring-1 ring-danger/10">
                   {err}
@@ -231,13 +165,7 @@ export default function AuthScreen() {
                 className="group relative mt-2 flex w-full items-center justify-between rounded-full bg-[#020A2E] py-2 pl-6 pr-2 text-[15px] font-medium text-[#EEF3FE] shadow-[0_12px_28px_-12px_rgba(2,10,46,0.7)] transition-all duration-500 active:scale-[0.98] disabled:opacity-60"
                 style={{ transitionTimingFunction: EASE }}
               >
-                <span>
-                  {busy
-                    ? 'Đang xử lý…'
-                    : isLogin
-                    ? 'Đăng nhập'
-                    : 'Tạo tài khoản'}
-                </span>
+                <span>{busy ? 'Đang xử lý…' : 'Đăng nhập'}</span>
                 <span
                   className="flex h-10 w-10 items-center justify-center rounded-full bg-[#003AD6] text-white transition-transform duration-500 group-hover:translate-x-1 group-hover:-translate-y-[1px] group-hover:scale-105"
                   style={{ transitionTimingFunction: EASE }}
@@ -255,18 +183,16 @@ export default function AuthScreen() {
               </button>
             </form>
 
-            {isLogin && (
-              <div className="mt-8 rounded-[1.1rem] bg-accent-50 p-4 ring-1 ring-accent-100">
-                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-accent-600">
-                  Tài khoản demo
-                </p>
-                <p className="mt-1.5 text-[13px] leading-relaxed text-ink-secondary">
-                  superadmin@basao.com · super1234
-                  <br />
-                  admin@basao.com · admin1234
-                </p>
-              </div>
-            )}
+            <div className="mt-8 rounded-[1.1rem] bg-accent-50 p-4 ring-1 ring-accent-100">
+              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-accent-600">
+                Tài khoản demo
+              </p>
+              <p className="mt-1.5 text-[13px] leading-relaxed text-ink-secondary">
+                superadmin@basao.com · super1234
+                <br />
+                admin@basao.com · admin1234
+              </p>
+            </div>
           </div>
         </div>
       </main>
