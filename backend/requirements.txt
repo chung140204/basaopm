@@ -4,3 +4,6 @@ psycopg[binary]==3.2.3
 geopandas==1.0.1
 shapely==2.0.6
 pyproj==3.7.0
+# Auth: hash mật khẩu + JWT
+bcrypt==4.2.1
+PyJWT==2.10.1

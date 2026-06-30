@@ -15,46 +15,14 @@ export function normCellCode(code) {
   return String(code).replace(/-0*(\d)/, '-$1');
 }
 
-// Trộn field nghiệp vụ thật vào 1 feature mock (giữ geometry/centroid).
-function mergeApiCell(feature, api) {
-  const p = feature.properties;
-  return {
-    ...feature,
-    properties: {
-      ...p,
-      zone: api.zone ?? p.zone, // phân khu từ DB
-      area: api.area ?? p.area,
-      value: api.value ?? 0,
-      businessStatus: api.businessStatus ?? p.businessStatus,
-      collateralStatus: api.collateralStatus ?? p.collateralStatus,
-      paymentStatus: api.paymentStatus ?? p.paymentStatus,
-      planningType: api.planningType ?? p.planningType,
-      currentOwner: api.owner ?? p.currentOwner,
-      address: api.address ?? p.address,
-      paid: api.paid ?? p.paid,
-      remaining: api.remaining ?? p.remaining,
-      constructionStatus: api.constructionStatus ?? p.constructionStatus,
-      buildDensity: api.buildDensity ?? p.buildDensity,
-      buildFloors:
-        api.buildFloorMin != null
-          ? `${api.buildFloorMin}-${api.buildFloorMax} tầng`
-          : p.buildFloors,
-      bookStatus: api.bookStatus ?? p.bookStatus,
-      bookNo: api.bookNo ?? p.bookNo,
-      internalLegal: api.internalLegal ?? p.internalLegal,
-      _source: 'db',
-    },
-  };
-}
-
-// Dựng feature lưới cho 1 ô DCB09 (lô chưa có toạ độ thật → grid sơ đồ).
-function buildDcb09Cell(api, idx) {
+// Dựng feature lưới cho 1 ô từ DB (lô dùng grid sơ đồ — bố cục lưới đều,
+// không có toạ độ bản vẽ). gy = mép trên của lưới (mỗi lô 1 dải y riêng).
+function buildGridCell(api, idx, lotCode, subdivisionId, gy) {
   const cols = 8;
   const cw = 100;
   const ch = 80;
   const gap = 2;
   const gx = 70;
-  const gy = 640;
   const col = idx % cols;
   const row = Math.floor(idx / cols);
   const x = gx + col * (cw + gap);
@@ -70,8 +38,8 @@ function buildDcb09Cell(api, idx) {
     },
     properties: {
       cellCode: api.cellCode,
-      lotCode: 'DCB09',
-      subdivisionId: 'dcb09',
+      lotCode,
+      subdivisionId,
       zone: api.zone ?? 'khu-b', // phân khu từ DB
       centroid: [cx, cy],
       area: api.area ?? 0,
@@ -111,26 +79,50 @@ function buildDcb09Cell(api, idx) {
  */
 export function useDbCells(initial = CELLS) {
   const [cells, setCells] = useState(initial);
+  // ready=false cho tới khi lần fetch đầu hoàn tất (kể cả khi backend tắt → vẫn
+  // bật true để UI thôi hiện skeleton, hiển thị data tĩnh). Tránh "nhấp nháy
+  // xám": mini-map chờ ready mới tô màu trạng thái.
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([getCells('DCB02'), getCells('DCB09')]).then(([dcb02, dcb09]) => {
+    // DCB02, DCB05, DCB09: dựng grid lưới mới từ DB (mỗi lô 1 dải y riêng).
+    // Không còn merge vào mock — DCB02 giờ là grid đều như DCB09.
+    Promise.all([
+      getCells('DCB02'),
+      getCells('DCB05'),
+      getCells('DCB09'),
+    ]).then(([dcb02, dcb05, dcb09]) => {
       if (cancelled) return;
-      const byCode = new Map(dcb02.map((c) => [normCellCode(c.cellCode), c]));
-      const dcb09Cells = dcb09.map((c, i) => buildDcb09Cell(c, i));
+      const dcb02Cells = dcb02.map((c, i) =>
+        buildGridCell(c, i, 'DCB02', 'dcb02', 80)
+      );
+      const dcb05Cells = dcb05.map((c, i) =>
+        buildGridCell(c, i, 'DCB05', 'dcb05', 400)
+      );
+      const dcb09Cells = dcb09.map((c, i) =>
+        buildGridCell(c, i, 'DCB09', 'dcb09', 640)
+      );
       setCells((prev) => {
-        const hasDcb09 = prev.some((f) => f.properties.lotCode === 'DCB09');
-        const merged = prev.map((f) => {
-          const api = byCode.get(normCellCode(f.properties.cellCode));
-          return api ? mergeApiCell(f, api) : f;
-        });
-        return hasDcb09 ? merged : [...merged, ...dcb09Cells];
+        // Bỏ ô mock DCB02/DCB05 (nếu có) rồi thay bằng bản dựng từ DB.
+        const kept = prev.filter(
+          (f) =>
+            f.properties.lotCode !== 'DCB02' &&
+            f.properties.lotCode !== 'DCB05'
+        );
+        const hasDcb09 = kept.some((f) => f.properties.lotCode === 'DCB09');
+        const base = [...kept, ...dcb02Cells, ...dcb05Cells];
+        return hasDcb09 ? base : [...base, ...dcb09Cells];
       });
+      setReady(true);
+    })
+    .catch(() => {
+      if (!cancelled) setReady(true); // backend lỗi → vẫn bỏ skeleton, dùng data tĩnh
     });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  return [cells, setCells];
+  return [cells, setCells, ready];
 }

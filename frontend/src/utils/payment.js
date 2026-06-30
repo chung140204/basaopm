@@ -13,6 +13,30 @@ export function paymentProgress(totalValue, payments = []) {
   return { total, paid, remaining, percent };
 }
 
+// Suy ra trạng thái từng đợt thanh toán (DB không lưu cột này).
+// Cộng dồn số tiền theo thứ tự đợt:
+//   - Đợt đầu tiên               → 'deposit'  (Đặt cọc)
+//   - Đợt làm tổng tích lũy ĐỦ   → 'done'     (Hoàn tất)
+//   - Còn lại                    → 'partial'  (Thanh toán một phần)
+// Trả về mảng cùng độ dài payments, mỗi phần tử { key, label }.
+export function derivePaymentStages(payments = [], totalDue = 0) {
+  let cumulative = 0;
+  return (payments || []).map((p, i) => {
+    cumulative += Number(p.amount) || 0;
+    if (i === 0) return { key: 'deposit', label: 'Đặt cọc' };
+    if (totalDue > 0 && cumulative >= totalDue)
+      return { key: 'done', label: 'Hoàn tất' };
+    return { key: 'partial', label: 'Thanh toán một phần' };
+  });
+}
+
+// Lớp màu Tailwind cho badge trạng thái đợt.
+export const PAYMENT_STAGE_TONE = {
+  deposit: 'bg-surface-2 text-ink-secondary',
+  partial: 'bg-success-bg text-success',
+  done: 'bg-success text-white',
+};
+
 // Nhãn hình thức thanh toán.
 export const PAYMENT_METHODS = [
   { value: 'cash', label: 'Tiền mặt' },

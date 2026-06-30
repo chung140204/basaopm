@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { X, Pencil, Maximize2, Grid3x3, MapPin } from 'lucide-react';
+import { X, Pencil, Maximize2, Grid3x3, MapPin, ChevronRight } from 'lucide-react';
 import LotShape from './LotShape';
 import { AreaBreakdownList } from './AreaBreakdownBar';
 import { labelFor, getLayer } from '../../lib/layers';
@@ -21,7 +21,7 @@ function Stat({ icon: Icon, label, value }) {
   );
 }
 
-export default function LotDetailPanel({ lot, onClose, onEdit }) {
+export default function LotDetailPanel({ lot, onClose, onEdit, onOpenCell }) {
   useEffect(() => {
     const h = (e) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', h);
@@ -110,24 +110,52 @@ export default function LotDetailPanel({ lot, onClose, onEdit }) {
           <ul className="space-y-1.5">
             {lot.cells.map((c) => {
               const p = c.properties;
+              const dot = (
+                <span
+                  className="h-2.5 w-2.5 flex-shrink-0 rounded-sm"
+                  style={{ backgroundColor: colorOf('business', p.businessStatus) }}
+                />
+              );
+              const meta = (
+                <span className="flex items-center gap-3 text-xs text-ink-muted">
+                  <span className="tabular">{formatM2(p.area)}</span>
+                  <span className="hidden sm:inline">
+                    {labelFor('business', p.businessStatus)}
+                  </span>
+                </span>
+              );
+              // Click → mở chi tiết ô ở màn Quản lý theo ô (nếu được nối handler).
+              if (onOpenCell) {
+                return (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      onClick={() => onOpenCell(p.cellCode)}
+                      title={`Xem chi tiết ô ${p.cellCode}`}
+                      className="flex w-full items-center justify-between gap-2 rounded-md border border-line px-3 py-2 text-left text-sm transition-colors hover:border-accent-500 hover:bg-accent-50"
+                    >
+                      <span className="flex items-center gap-2">
+                        {dot}
+                        <span className="font-medium text-ink-primary">{p.cellCode}</span>
+                      </span>
+                      <span className="flex items-center gap-2">
+                        {meta}
+                        <ChevronRight className="h-4 w-4 flex-shrink-0 text-ink-muted" />
+                      </span>
+                    </button>
+                  </li>
+                );
+              }
               return (
                 <li
                   key={c.id}
                   className="flex items-center justify-between gap-2 rounded-md border border-line px-3 py-2 text-sm"
                 >
                   <span className="flex items-center gap-2">
-                    <span
-                      className="h-2.5 w-2.5 flex-shrink-0 rounded-sm"
-                      style={{ backgroundColor: colorOf('business', p.businessStatus) }}
-                    />
+                    {dot}
                     <span className="font-medium text-ink-primary">{p.cellCode}</span>
                   </span>
-                  <span className="flex items-center gap-3 text-xs text-ink-muted">
-                    <span className="tabular">{formatM2(p.area)}</span>
-                    <span className="hidden sm:inline">
-                      {labelFor('business', p.businessStatus)}
-                    </span>
-                  </span>
+                  {meta}
                 </li>
               );
             })}

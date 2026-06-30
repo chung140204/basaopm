@@ -33,3 +33,10 @@
 .leaflet-control {
   z-index: 2;
 }
+
+/* Khi click 1 path (lô / thửa), trình duyệt vẽ outline focus đen quanh BBOX
+   của path → trông như khung chữ nhật bao cụm. Tắt outline mặc định đó; việc
+   highlight phần đang chọn đã do app tự xử lý bằng màu. */
+.leaflet-interactive:focus {
+  outline: none;
+}

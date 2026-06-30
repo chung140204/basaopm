@@ -35,3 +35,11 @@ Thumbs.db
 
 # Misc dumps
 _dcb05_dump.json
+_dcb05_data.json
+
+# Data files (raw Excel + intermediate dumps) — không đẩy lên repo
+*.xlsx
+backend/_excel/
+
+# Agent / editor skills config
+.claude/

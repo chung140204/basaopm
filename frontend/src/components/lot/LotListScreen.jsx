@@ -9,18 +9,20 @@ import LotDetailPanel from './LotDetailPanel';
 import EditLotModal from './EditLotModal';
 import AreaBreakdownBar from './AreaBreakdownBar';
 
-function LotCard({ lot, active, onClick }) {
+function LotCard({ lot, active, onClick, ready }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex flex-col overflow-hidden rounded-lg border bg-surface-1 text-left transition-all hover:shadow-md ${
-        active ? 'border-accent-500 ring-1 ring-accent-500' : 'border-line'
+      className={`group flex flex-col overflow-hidden rounded-xl border bg-surface-1 text-left transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:shadow-focus active:translate-y-0 ${
+        active
+          ? 'border-accent-500 ring-1 ring-accent-500'
+          : 'border-line hover:border-accent-500'
       }`}
     >
       {/* Mini-map */}
       <div className="flex items-center justify-center border-b border-line bg-surface-2 p-2">
-        <LotShape lot={lot} width={232} height={128} />
+        <LotShape lot={lot} width={232} height={128} loading={!ready} />
       </div>
       {/* Info */}
       <div className="flex flex-col gap-2 px-3 py-2.5">
@@ -41,15 +43,20 @@ function LotCard({ lot, active, onClick }) {
           </span>
         </div>
         {/* Diện tích theo tình trạng kinh doanh */}
-        <AreaBreakdownBar layerId="business" data={lot.areaByBusiness} />
+        {ready ? (
+          <AreaBreakdownBar layerId="business" data={lot.areaByBusiness} />
+        ) : (
+          <div className="h-2.5 w-full animate-pulse rounded-full bg-surface-2" />
+        )}
       </div>
     </button>
   );
 }
 
-export default function LotListScreen({ showToast }) {
+export default function LotListScreen({ showToast, onOpenCell }) {
   // Cells trộn dữ liệu thật từ DB (qua API). Backend tắt → CELLS tĩnh.
-  const [cells] = useDbCells(CELLS);
+  // ready=false trong lúc chờ DB → mini-map hiện skeleton thay vì màu xám.
+  const [cells, , ready] = useDbCells(CELLS);
   // Local copy of derived lots so edits persist within the session.
   const [lots, setLots] = useState(LOTS);
 
@@ -154,6 +161,7 @@ export default function LotListScreen({ showToast }) {
                         lot={lot}
                         active={lot.id === selectedId}
                         onClick={() => setSelectedId(lot.id)}
+                        ready={ready}
                       />
                     ))}
                   </div>
@@ -170,6 +178,7 @@ export default function LotListScreen({ showToast }) {
           lot={selected}
           onClose={() => setSelectedId(null)}
           onEdit={(l) => setEditing(l)}
+          onOpenCell={onOpenCell}
         />
       )}
 

@@ -268,9 +268,9 @@ def main():
             cell_code = r[2]
             code_clean_full = r[7]   # 'PalmCity-DCB02-12/15'
             code_orig = r[8]
-            # rút gọn '12/15' từ '...DCB02-12/15'
-            m = re.search(r"-(\d+/\d+)$", str(code_clean_full or ""))
-            code_clean = m.group(1) if m else str(code_clean_full)
+            # Giữ NGUYÊN mã HĐ đầy đủ từ Excel ('PalmCity-DCB02-12/15') — trước
+            # đây regex cắt còn '12/15' làm mất tiền tố lô/dự án khi hiển thị.
+            code_clean = str(code_clean_full).strip() if code_clean_full else None
             key = (lot_code, code_clean)
             if key not in contract_id_by_key:
                 cur.execute(

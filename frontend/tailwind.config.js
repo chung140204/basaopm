@@ -15,13 +15,22 @@ export default {
         'ink-primary': '#0F172A',
         'ink-secondary': '#475569',
         'ink-muted': '#94A3B8',
-        // Accent (brand blue)
+        // Accent (Basao brand blue). 500 = brand Blue, 700 = brand Dark Navy.
+        // Calibrated ramp for harmonious hover / surface / shadow. See color.md.
         accent: {
-          50: '#EFF6FF',
-          100: '#DBEAFE',
-          500: '#3B82F6',
-          600: '#2563EB',
-          700: '#1D4ED8',
+          50: '#E6EDFB',
+          100: '#C2D2F6',
+          500: '#003AD6',
+          600: '#0030B0',
+          700: '#000D6D',
+        },
+        // Mint (Basao secondary accent — brand Mint Green at 500). See color.md.
+        mint: {
+          50: '#E3FCF1',
+          100: '#BEF7DC',
+          500: '#43F0A4',
+          600: '#23D586',
+          700: '#16A86A',
         },
         // Status — text/border colors
         success: '#16A34A',
@@ -46,7 +55,7 @@ export default {
         sm: '0 1px 2px rgba(15,23,42,.06)',
         md: '0 4px 12px rgba(15,23,42,.08)',
         xl: '0 20px 40px rgba(15,23,42,.18)',
-        focus: '0 0 0 3px rgba(59,130,246,.35)',
+        focus: '0 0 0 3px rgba(0,58,214,.35)',
       },
       fontFamily: {
         sans: [

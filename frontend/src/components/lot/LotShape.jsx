@@ -6,7 +6,13 @@ function colorOf(layerId, value) {
 
 // Mini-map of a lot's shape: draws each child cell polygon, coloured by
 // business status. Fits the lot bbox into the given pixel box with padding.
-export default function LotShape({ lot, width = 220, height = 120, showLabels = true }) {
+export default function LotShape({
+  lot,
+  width = 220,
+  height = 120,
+  showLabels = true,
+  loading = false,
+}) {
   const { bbox, cells } = lot;
   const pad = 6;
   const innerW = width - pad * 2;
@@ -30,16 +36,21 @@ export default function LotShape({ lot, width = 220, height = 120, showLabels = 
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
-      className="block"
+      className={`block${loading ? ' animate-pulse' : ''}`}
       role="img"
-      aria-label={`Hình dáng lô ${lot.lotCode}`}
+      aria-label={
+        loading ? `Đang tải lô ${lot.lotCode}` : `Hình dáng lô ${lot.lotCode}`
+      }
     >
       {cells.map((c) => {
         const pts = c.geometry.coordinates[0]
           .map(([x, y]) => project(x, y).join(','))
           .join(' ');
         const [cx, cy] = project(...c.properties.centroid);
-        const fill = colorOf('business', c.properties.businessStatus);
+        // Đang chờ DB → tô xám trung tính (không suy ra "chưa bán" từ data tĩnh).
+        const fill = loading
+          ? '#CBD5E1'
+          : colorOf('business', c.properties.businessStatus);
         return (
           <g key={c.id}>
             <polygon
@@ -49,7 +60,7 @@ export default function LotShape({ lot, width = 220, height = 120, showLabels = 
               stroke="#ffffff"
               strokeWidth={1}
             />
-            {showLabels && scale > 0.08 && (
+            {!loading && showLabels && scale > 0.08 && (
               <text
                 x={cx}
                 y={cy + 3}

@@ -501,13 +501,13 @@ function PaymentView({ m }) {
         {totalDue > 0 ? (
           <>
             <div className="mb-2 h-2 w-full overflow-hidden rounded-full bg-surface-2">
-              <div className="h-full bg-green-500" style={{ width: `${prog.percent}%` }} />
+              <div className="h-full bg-success" style={{ width: `${prog.percent}%` }} />
             </div>
             <Row label="Đã thanh toán">
-              <span className="text-green-700">{formatCurrency(prog.paid)}</span>
+              <span className="text-success">{formatCurrency(prog.paid)}</span>
             </Row>
             <Row label="Còn lại">
-              <span className="text-amber-700">{formatCurrency(prog.remaining)}</span>
+              <span className="text-warning">{formatCurrency(prog.remaining)}</span>
             </Row>
             <Row label="Tỷ lệ">{prog.percent.toFixed(1)}%</Row>
           </>

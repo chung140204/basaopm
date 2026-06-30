@@ -293,6 +293,7 @@ export default function MapScreen({ showToast }) {
           ranhThuaFilter={hideUnmatched ? ranhThuaFilter : null}
           showRanhThuaSubdivisions={showBorders}
           showLo={showLo}
+          selectedLoId={selectedLoId}
           onLoClick={(id) => {
             setSelectedLoId(id);
             setRanhThuaPlot(null);

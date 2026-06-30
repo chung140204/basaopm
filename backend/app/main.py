@@ -9,11 +9,12 @@ Geometry trả về là WGS84 (EPSG:4326), dạng GeoJSON (lng, lat).
 """
 import json
 
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .db import get_conn
+from . import auth as A
 
 app = FastAPI(title="Ranh Thua API", version="1.0.0")
 
@@ -35,6 +36,108 @@ class MetaUpdate(BaseModel):
 
 @app.get("/health")
 def health():
+    return {"ok": True}
+
+
+# =====================================================================
+# AUTH — đăng ký / đăng nhập / phân quyền
+# =====================================================================
+class RegisterIn(BaseModel):
+    email: str
+    password: str
+    fullName: str | None = None
+    role: str | None = None  # chỉ superadmin mới được chỉ định role khi tạo
+
+
+class LoginIn(BaseModel):
+    email: str
+    password: str
+
+
+class RoleUpdateIn(BaseModel):
+    role: str
+
+
+@app.get("/api/auth/meta")
+def auth_meta():
+    """Danh sách role + quyền cho FE gating (không cần đăng nhập)."""
+    return {
+        "roles": [
+            {"value": k, "label": v["label"], "permissions": v["permissions"]}
+            for k, v in A.ROLES.items()
+        ],
+        "permissions": A.PERMISSIONS,
+    }
+
+
+@app.post("/api/auth/register")
+def register(body: RegisterIn):
+    email = (body.email or "").strip()
+    if not email or not body.password:
+        raise HTTPException(status_code=400, detail="Thiếu email hoặc mật khẩu")
+    if len(body.password) < 6:
+        raise HTTPException(status_code=400, detail="Mật khẩu tối thiểu 6 ký tự")
+    # Đăng ký công khai LUÔN tạo role mặc định (an toàn); chỉ superadmin đổi sau.
+    role = A.DEFAULT_ROLE
+    with get_conn() as conn, conn.cursor() as cur:
+        if A.get_user_by_email(cur, email):
+            raise HTTPException(status_code=409, detail="Email đã tồn tại")
+        cur.execute(
+            "INSERT INTO app_user (email, full_name, password_hash, role) "
+            "VALUES (%s,%s,%s,%s) RETURNING id, email, full_name, role, is_active",
+            (email, body.fullName, A.hash_password(body.password), role),
+        )
+        row = cur.fetchone()
+        conn.commit()
+    user = A._row_to_user(row)
+    token = A.make_token(user["id"], user["role"])
+    return {"token": token, "user": user}
+
+
+@app.post("/api/auth/login")
+def login(body: LoginIn):
+    with get_conn() as conn, conn.cursor() as cur:
+        row = A.get_user_by_email(cur, (body.email or "").strip())
+    if not row or not A.verify_password(body.password, row[5]):
+        raise HTTPException(status_code=401, detail="Email hoặc mật khẩu không đúng")
+    user = A._row_to_user(row)
+    token = A.make_token(user["id"], user["role"])
+    return {"token": token, "user": user}
+
+
+@app.get("/api/auth/me")
+def me(user: dict = Depends(A.current_user)):
+    return {"user": user}
+
+
+# ---- Quản lý người dùng (chỉ superadmin có quyền 'user.manage') ----------
+@app.get("/api/users")
+def list_users(user: dict = Depends(A.require_permission("user.manage"))):
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            f"SELECT {A._USER_COLS} FROM app_user WHERE deleted_at IS NULL "
+            "ORDER BY created_at"
+        )
+        rows = cur.fetchall()
+    return {"users": [A._row_to_user(r) for r in rows]}
+
+
+@app.put("/api/users/{user_id}/role")
+def update_user_role(
+    user_id: int,
+    body: RoleUpdateIn,
+    user: dict = Depends(A.require_permission("user.manage")),
+):
+    if body.role not in A.ROLES:
+        raise HTTPException(status_code=400, detail="Role không hợp lệ")
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE app_user SET role=%s WHERE id=%s AND deleted_at IS NULL",
+            (body.role, user_id),
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Không tìm thấy người dùng")
+        conn.commit()
     return {"ok": True}
 
 
@@ -307,17 +410,18 @@ def _cell_contract(cur, cell_id: int) -> dict | None:
 def _cell_mortgage(cur, cell_id: int, subdivision_id: int) -> dict | None:
     # Ưu tiên thế chấp override cấp ô; nếu không có → kế thừa cấp lô.
     cur.execute(
-        """SELECT state, lender_name, borrower_name, loan_value, note
+        """SELECT state, lender_name, borrower_name, loan_value, note, purpose
            FROM mortgage
            WHERE deleted_at IS NULL AND (cell_id=%s OR subdivision_id=%s)
-           ORDER BY (cell_id=%s) DESC LIMIT 1""",
-        (cell_id, subdivision_id, cell_id),
+           ORDER BY (cell_id IS NOT NULL) DESC LIMIT 1""",
+        (cell_id, subdivision_id),
     )
     r = cur.fetchone()
     if not r:
         return None
     return {"status": r[0], "lender": r[1], "borrower": r[2],
-            "loanValue": float(r[3]) if r[3] is not None else None, "note": r[4]}
+            "loanValue": float(r[3]) if r[3] is not None else None,
+            "note": r[4], "purpose": r[5]}
 
 
 def _row_to_cell(r: tuple) -> dict:

@@ -37,6 +37,35 @@ import {
  */
 const GOOGLE_TILE_URL = 'https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}';
 
+// Style lớp lô: thường vs đang chọn (viền dày + đậm hơn).
+const LO_STYLE_BASE = {
+  color: '#B45309',
+  weight: 2.5,
+  fillColor: '#F59E0B',
+  fillOpacity: 0.08,
+  opacity: 0.95,
+};
+const LO_STYLE_SELECTED = {
+  color: '#92400E',
+  weight: 4,
+  fillColor: '#F59E0B',
+  fillOpacity: 0.22,
+  opacity: 1,
+};
+
+// Đổi style các lô theo lô đang chọn — chỉ setStyle, KHÔNG vẽ lại lớp.
+// loLayers: Map<id, leafletLayer>; selectedId: id lô đang chọn (hoặc null).
+function applyLoHighlight(loLayers, selectedId) {
+  loLayers.forEach((lyr, id) => {
+    if (id === selectedId) {
+      lyr.setStyle(LO_STYLE_SELECTED);
+      lyr.bringToFront(); // nổi lên trên để viền đậm không bị che
+    } else {
+      lyr.setStyle(LO_STYLE_BASE);
+    }
+  });
+}
+
 function latLngToLeaflet(path) {
   return path.map((p) => [p.lat, p.lng]);
 }
@@ -59,6 +88,7 @@ export default function LeafletMapCanvas({
   ranhThuaFilter = null, // (feature)=>bool: ẩn/hiện thửa theo bộ lọc; null = hiện hết
   showRanhThuaSubdivisions = false, // vẽ ranh phân khu A/B của ranh thửa
   showLo = false, // vẽ ranh lô (hình bao cụm thửa) + cho click
+  selectedLoId = null, // id lô đang chọn → tô viền đậm để biết đang click lô nào
   onLoClick, // (loId) → mở panel lô
   onRanhThuaClick, // ({lat,lng}) → MapScreen gọi API + mở panel
   ranhThuaHighlight = null, // GeoJSON geometry của thửa đang chọn để vẽ viền
@@ -77,6 +107,8 @@ export default function LeafletMapCanvas({
   const ranhThuaDataRef = useRef(null); // FeatureCollection đã tải (để tô lại màu)
   const ranhThuaSubRef = useRef(null); // L.LayerGroup ranh phân khu A/B
   const loRef = useRef(null); // L.GeoJSON ranh lô
+  const loLayersRef = useRef(new Map()); // id lô → layer con (để đổi style khi chọn)
+  const selectedLoIdRef = useRef(selectedLoId); // id lô chọn (cho callback async)
   const ranhThuaHlRef = useRef(null); // L.GeoJSON highlight thửa đang chọn
   const onRanhThuaClickRef = useRef(onRanhThuaClick); // tránh rebind handler
   const onLoClickRef = useRef(onLoClick);
@@ -285,7 +317,7 @@ export default function LeafletMapCanvas({
       // thái mặc định), KHÔNG dùng data tĩnh nữa.
       Promise.all([
         getRanhThuaGeoJSON(best.id),
-        getCellsGeoJSON(), // mọi ô đã map geom (DCB02 + DCB09)
+        getCellsGeoJSON(), // mọi ô đã map geom (DCB02 + DCB05 + DCB09)
       ]).then(([geojson, cellsFC]) => {
         if (cancelled) return;
         ranhThuaDataRef.current = applyDbOverlay(geojson, cellsFC);
@@ -447,17 +479,13 @@ export default function LeafletMapCanvas({
     if (!showRanhThua || !showLo) return;
 
     let cancelled = false;
+    loLayersRef.current = new Map();
     getLoGeoJSON(ranhThuaLayerId).then((geojson) => {
       if (cancelled || !geojson || !mapRef.current) return;
       const layer = L.geoJSON(geojson, {
-        style: {
-          color: '#B45309',
-          weight: 2.5,
-          fillColor: '#F59E0B',
-          fillOpacity: 0.08,
-          opacity: 0.95,
-        },
+        style: LO_STYLE_BASE,
         onEachFeature: (f, lyr) => {
+          loLayersRef.current.set(f.id, lyr); // nhớ layer theo id để đổi style sau
           lyr.bindTooltip(
             `Lô #${f.id} · ${f.properties.cellCount} ô · ${Math.round(
               f.properties.areaTotal
@@ -472,11 +500,22 @@ export default function LeafletMapCanvas({
       });
       layer.addTo(mapRef.current);
       loRef.current = layer;
+      // Áp highlight lô đang chọn (nếu có) ngay sau khi vẽ xong.
+      applyLoHighlight(loLayersRef.current, selectedLoIdRef.current);
     });
     return () => {
       cancelled = true;
     };
+    // KHÔNG phụ thuộc selectedLoId: đổi lô chọn KHÔNG tải/vẽ lại lớp lô
+    // (tránh gọi lại API + dựng lại toàn bộ → lag). Highlight do effect riêng lo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, showRanhThua, showLo, ranhThuaLayerId]);
+
+  // 3f-2) Đổi style lô đang chọn — KHÔNG tải/vẽ lại, chỉ setStyle layer liên quan.
+  useEffect(() => {
+    selectedLoIdRef.current = selectedLoId;
+    applyLoHighlight(loLayersRef.current, selectedLoId);
+  }, [selectedLoId]);
 
   // 3c) Highlight thửa đang chọn (GeoJSON geometry trả từ API click).
   useEffect(() => {

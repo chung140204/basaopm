@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
-  Lock,
   Pencil,
   FileText,
-  Upload,
   Scale,
   Wallet,
   CheckCircle2,
@@ -12,16 +10,13 @@ import {
   FileUp,
   Image as ImageIcon,
   Trash2,
+  Loader2,
 } from 'lucide-react';
-import { labelFor, getLayer } from '../../lib/layers';
 import { zoneOfLot, zoneName } from '../../data/cells';
-import { formatM2, formatCurrency, formatDate, formatPercent } from '../../utils/format';
-import {
-  paymentProgress,
-  paymentMethodLabel,
-  mortgageStatusLabel,
-} from '../../utils/payment';
+import { formatM2, formatDate, formatPercent } from '../../utils/format';
 import { getCellDetail } from '../../services/cellsApi';
+import { Card, Row, SectionTitle, val } from './cellDetailUi';
+import PaymentPanel from './PaymentPanel';
 import {
   labelConstruction,
   labelPlanning,
@@ -54,7 +49,7 @@ function enrichWithDetail(base, d) {
     ...base,
     currentOwner: d.owner ?? base.currentOwner,
     address: d.address ?? base.address,
-    ownershipContract: d.contract?.code ?? base.ownershipContract,
+    ownershipContract: d.contract?.code ?? null,
     constructionStatus: d.constructionStatus
       ? labelConstruction(d.constructionStatus)
       : base.constructionStatus,
@@ -76,11 +71,12 @@ function enrichWithDetail(base, d) {
           signDate: d.contract.signDate,
           customer: d.contract.customer,
           totalValue: d.value,
+          unitPrice: d.contract.unitPrice,
           taxBearer: d.contract.taxBearer
             ? labelTaxBearer(d.contract.taxBearer)
             : null,
         }
-      : base.contract,
+      : null,
     payments: (d.payments || []).map((pay) => ({
       date: pay.date,
       amount: pay.amount,
@@ -94,8 +90,9 @@ function enrichWithDetail(base, d) {
           status: d.mortgage.status,
           outstanding: d.mortgage.loanValue,
           note: d.mortgage.note,
+          purpose: d.mortgage.purpose, // mục đích thế chấp (từ DB)
         }
-      : base.mortgage,
+      : null,
     // Timeline pháp lý/THA thật từ DB (legalEvents) → format LegalHistory.
     legalHistory:
       d.legalEvents && d.legalEvents.length
@@ -103,10 +100,11 @@ function enrichWithDetail(base, d) {
             status: e.status || labelLegalKind(e.kind),
             date: e.date,
             note: e.content,
+            agency: e.agency, // cơ quan thi hành án (enforce_agency từ DB)
             current: i === 0,
             tone: i === 0 ? 'current' : 'done',
           }))
-        : base.legalHistory,
+        : [],
   };
 }
 
@@ -118,57 +116,6 @@ const TABS = [
   { key: 'legal', label: 'Pháp lý & hồ sơ', icon: Scale },
   { key: 'payment', label: 'Giao dịch & thanh toán', icon: Wallet },
 ];
-
-function colorOf(layerId, value) {
-  return getLayer(layerId).statuses.find((s) => s.value === value)?.fill ?? '#94A3B8';
-}
-
-function StatusBadge({ layerId, value }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-medium text-ink-secondary">
-      <span
-        className="h-1.5 w-1.5 rounded-full"
-        style={{ backgroundColor: colorOf(layerId, value) }}
-      />
-      {labelFor(layerId, value)}
-    </span>
-  );
-}
-
-// Render a value, falling back to "—" when empty/null.
-function val(v) {
-  if (v == null || v === '') return <span className="text-ink-muted">—</span>;
-  return v;
-}
-
-function Row({ label, children, locked }) {
-  return (
-    <div className="flex items-start justify-between gap-3 py-1.5">
-      <span className="flex items-center gap-1 text-sm text-ink-muted">
-        {label}
-        {locked && <Lock className="h-3 w-3" />}
-      </span>
-      <span className="text-right text-sm font-medium text-ink-primary">
-        {children}
-      </span>
-    </div>
-  );
-}
-
-function SectionTitle({ children }) {
-  return (
-    <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
-      {children}
-    </p>
-  );
-}
-
-// Card wrapper so each section reads as a tidy block in the wider layout.
-function Card({ children }) {
-  return (
-    <div className="rounded-lg border border-line bg-surface-1 p-4">{children}</div>
-  );
-}
 
 // Timeline lịch sử pháp lý: mỗi mốc gồm trạng thái/hồ sơ, ngày cập nhật, ghi chú.
 function LegalHistory({ items }) {
@@ -213,8 +160,13 @@ function LegalHistory({ items }) {
               <span className="text-xs text-ink-muted tabular">
                 {it.date ? formatDate(it.date) : '—'}
               </span>
-              <span className="text-xs italic text-ink-muted">
-                {it.note || '—'}
+              <span className="flex flex-col gap-0.5 text-xs italic text-ink-muted">
+                <span>{it.note || '—'}</span>
+                {it.agency && (
+                  <span className="not-italic text-ink-secondary">
+                    CQ thi hành án: {it.agency}
+                  </span>
+                )}
               </span>
             </li>
           );
@@ -228,8 +180,36 @@ export default function CellDetailScreen({ feature, defaultTab = 'legal', onBack
   const [tab, setTab] = useState(defaultTab);
   const base = feature.properties;
   // Chi tiết THẬT từ DB (contract/payments/mortgage/legal timeline).
+  // status: 'loading' (đang gọi API) | 'ok' (có DB) | 'failed' (API null).
   const [detail, setDetail] = useState(null);
-  const p = detail ? enrichWithDetail(base, detail) : base;
+  const [status, setStatus] = useState('loading');
+  // Chỉ dùng DB khi đã có detail (status='ok'). Khi đang tải / API lỗi, ẩn TẤT
+  // CẢ field nghiệp vụ (nested LẪN phẳng: owner/address/planningType/construction
+  // /contract/legalHistory...) để KHÔNG hiện data tĩnh từ cells.js. Chỉ giữ field
+  // định danh thật (mã ô/lô/diện tích) — những thứ luôn đúng từ grid.
+  const p =
+    status === 'ok'
+      ? enrichWithDetail(base, detail)
+      : {
+          cellCode: base.cellCode,
+          lotCode: base.lotCode,
+          area: base.area,
+          // nghiệp vụ: rỗng cho tới khi DB về
+          currentOwner: null,
+          address: null,
+          ownershipContract: null,
+          constructionStatus: null,
+          buildDensity: null,
+          buildFloors: null,
+          planningType: null,
+          value: null,
+          paid: null,
+          remaining: null,
+          contract: null,
+          payments: [],
+          mortgage: null,
+          legalHistory: [],
+        };
   // Hồ sơ số hóa — quản lý cục bộ trong phiên (thêm/xóa khi tải tệp).
   const [documents, setDocuments] = useState(base.documents ?? []);
 
@@ -237,10 +217,15 @@ export default function CellDetailScreen({ feature, defaultTab = 'legal', onBack
   useEffect(() => {
     let cancelled = false;
     setDetail(null);
+    setStatus('loading');
     if (base.cellCode) {
       fetchCellDetail(base.cellCode).then((d) => {
-        if (!cancelled) setDetail(d);
+        if (cancelled) return;
+        setDetail(d);
+        setStatus(d ? 'ok' : 'failed');
       });
+    } else {
+      setStatus('failed');
     }
     return () => {
       cancelled = true;
@@ -307,6 +292,17 @@ export default function CellDetailScreen({ feature, defaultTab = 'legal', onBack
       {/* Body */}
       <div className="flex-1 overflow-y-auto p-6">
         <div className="mx-auto max-w-4xl">
+          {status === 'loading' && (
+            <div className="mb-4 flex items-center gap-2 rounded-md border border-line bg-surface-2 px-4 py-2.5 text-sm text-ink-muted">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Đang tải dữ liệu từ máy chủ…
+            </div>
+          )}
+          {status === 'failed' && (
+            <div className="mb-4 rounded-md border border-warning/40 bg-warning-bg px-4 py-2.5 text-sm text-warning">
+              Không kết nối được máy chủ — đang hiển thị dữ liệu ngoại tuyến.
+            </div>
+          )}
           {tab === 'legal' && (
             <LegalTab
               p={p}
@@ -314,7 +310,7 @@ export default function CellDetailScreen({ feature, defaultTab = 'legal', onBack
               onChangeDocuments={setDocuments}
             />
           )}
-          {tab === 'payment' && <PaymentTab p={p} />}
+          {tab === 'payment' && <PaymentPanel p={p} />}
         </div>
       </div>
     </div>
@@ -413,17 +409,8 @@ function DocumentUpload({ documents, onChange }) {
 
   return (
     <Card>
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2">
         <SectionTitle>Hồ sơ số hóa</SectionTitle>
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          aria-label="Tải lên hồ sơ"
-          title="Tải lên hồ sơ"
-          className="rounded-md p-1.5 text-accent-600 hover:bg-accent-50"
-        >
-          <Upload className="h-4 w-4" />
-        </button>
       </div>
 
       {/* Vùng kéo-thả */}
@@ -512,135 +499,5 @@ function DocumentUpload({ documents, onChange }) {
         </ul>
       )}
     </Card>
-  );
-}
-
-// Tab "Giao dịch & thanh toán" — 4 nhóm:
-//   1) Hợp đồng  2) Lộ trình thanh toán  3) Lịch sử thanh toán  4) Thế chấp
-function PaymentTab({ p }) {
-  const c = p.contract;
-  const payments = p.payments || [];
-  const m = p.mortgage;
-  // Lộ trình: tổng phải TT = giá trị HĐ (nếu có) hoặc giá bán.
-  const totalDue = c?.totalValue ?? p.value ?? 0;
-  // Nếu chưa có lịch sử từng lần nhưng có tổng đã trả (paid) → tính theo paid.
-  const prog =
-    payments.length === 0 && p.paid
-      ? {
-          total: totalDue,
-          paid: p.paid,
-          remaining: Math.max(totalDue - p.paid, 0),
-          percent: totalDue > 0 ? Math.min(100, (p.paid / totalDue) * 100) : 0,
-        }
-      : paymentProgress(totalDue, payments);
-
-  return (
-    <div className="grid gap-4 md:grid-cols-2">
-      {/* 1) Thông tin hợp đồng */}
-      <Card>
-        <SectionTitle>Thông tin hợp đồng</SectionTitle>
-        <Row label="Tình trạng KD">
-          <StatusBadge layerId="business" value={p.businessStatus} />
-        </Row>
-        <Row label="Số hợp đồng">{val(c?.code ?? p.ownershipContract)}</Row>
-        <Row label="Ngày ký">{c?.signDate ? formatDate(c.signDate) : val(null)}</Row>
-        <Row label="Khách hàng">{val(c?.customer ?? p.currentOwner)}</Row>
-        <Row label="Tổng giá trị HĐ">
-          {c?.totalValue != null ? (
-            <span className="tabular">{formatCurrency(c.totalValue)}</span>
-          ) : (
-            val(p.value || null)
-          )}
-        </Row>
-        <Row label="Bên chịu thuế">{val(c?.taxBearer)}</Row>
-      </Card>
-
-      {/* 2) Lộ trình thanh toán */}
-      <Card>
-        <SectionTitle>Lộ trình thanh toán</SectionTitle>
-        {totalDue > 0 ? (
-          <>
-            <div className="mb-2 h-2 w-full overflow-hidden rounded-full bg-surface-2">
-              <div
-                className="h-full bg-green-500"
-                style={{ width: `${prog.percent}%` }}
-              />
-            </div>
-            <Row label="Giá trị phải TT">
-              <span className="tabular">{formatCurrency(prog.total)}</span>
-            </Row>
-            <Row label="Đã thanh toán">
-              <span className="tabular text-green-700">{formatCurrency(prog.paid)}</span>
-            </Row>
-            <Row label="Còn lại">
-              <span className="tabular text-amber-700">{formatCurrency(prog.remaining)}</span>
-            </Row>
-            <Row label="Tỷ lệ">{prog.percent.toFixed(1)}%</Row>
-          </>
-        ) : (
-          <p className="py-2 text-sm text-ink-muted">— chưa có hợp đồng —</p>
-        )}
-      </Card>
-
-      {/* 3) Lịch sử thanh toán */}
-      <Card>
-        <SectionTitle>Lịch sử thanh toán</SectionTitle>
-        {payments.length === 0 ? (
-          <p className="py-2 text-sm text-ink-muted">— chưa có lần thanh toán nào —</p>
-        ) : (
-          <ul className="space-y-1.5">
-            {payments.map((pay, i) => (
-              <li key={i} className="rounded-md border border-line px-3 py-2 text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-ink-primary tabular">
-                    {formatCurrency(pay.amount)}
-                  </span>
-                  <span className="text-xs text-ink-muted">{formatDate(pay.date)}</span>
-                </div>
-                <div className="mt-0.5 flex items-center gap-2 text-xs text-ink-muted">
-                  <span>{paymentMethodLabel(pay.method)}</span>
-                  {pay.voucher && <span>· CT: {pay.voucher}</span>}
-                </div>
-                {pay.note && (
-                  <p className="mt-0.5 text-xs text-ink-secondary">{pay.note}</p>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-        <button
-          type="button"
-          className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-line py-1.5 text-xs text-ink-muted hover:bg-surface-2"
-        >
-          + Ghi nhận thanh toán
-        </button>
-      </Card>
-
-      {/* 4) Thế chấp ngân hàng */}
-      <Card>
-        <SectionTitle>Thế chấp ngân hàng</SectionTitle>
-        <Row label="Tình trạng thế chấp">
-          {m?.status ? mortgageStatusLabel(m.status) : (
-            <StatusBadge layerId="legal" value={p.collateralStatus} />
-          )}
-        </Row>
-        <Row label="Tổ chức nhận thế chấp">{val(m?.lender)}</Row>
-        <Row label="Giá trị khoản vay">
-          {m?.loanValue != null ? (
-            <span className="tabular">{formatCurrency(m.loanValue)}</span>
-          ) : (
-            val(null)
-          )}
-        </Row>
-        <Row label="Dư nợ thế chấp">
-          {m?.outstanding != null ? (
-            <span className="tabular">{formatCurrency(m.outstanding)}</span>
-          ) : (
-            val(null)
-          )}
-        </Row>
-        <Row label="Ghi chú nội bộ">{val(m?.note)}</Row>
-      </Card>
-    </div>
   );
 }

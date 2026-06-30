@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Bell,
   ChevronRight,
+  ChevronDown,
   MapPin,
   Ruler,
   Grid3x3,
@@ -14,6 +15,7 @@ import {
   Pencil,
   EyeOff,
   RotateCw,
+  LogOut,
 } from 'lucide-react';
 import Badge from '../Badge';
 import EditProjectModal from '../EditProjectModal';
@@ -23,6 +25,18 @@ import {
   formatAreaFull,
   formatMonthYear,
 } from '../../utils/format';
+import { useAuth } from '../../auth/AuthContext';
+
+// Lấy 2 ký tự viết tắt từ tên/email để hiển thị trên avatar.
+function initialsOf(name) {
+  const s = (name || '').trim();
+  if (!s) return 'U';
+  const parts = s.split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return s.slice(0, 2).toUpperCase();
+}
 
 const FILTERS = [
   { key: 'all', label: 'Tất cả' },
@@ -102,16 +116,28 @@ function ProjectOpenCard({ project, onOpen, onEdit, onHide, onRestore }) {
     </div>
   );
 
+  // Click vào bất kỳ đâu trên card (trừ các nút con) đều mở dự án.
+  // Các nút Sửa/Ẩn/Khôi phục đã tự gọi stopPropagation nên không kích hoạt mở.
   return (
     <div
-      className={`group flex flex-col gap-4 rounded-lg border border-line bg-surface-1 p-4 shadow-sm transition-all hover:border-accent-500 hover:shadow-md lg:flex-row lg:items-center ${
+      role="button"
+      tabIndex={0}
+      aria-label={`Mở dự án ${project.tenHienThi}`}
+      onClick={() => onOpen(project)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen(project);
+        }
+      }}
+      className={`group flex cursor-pointer flex-col gap-4 rounded-xl border border-line bg-surface-1 p-4 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-accent-500 hover:shadow-md focus:outline-none focus-visible:border-accent-500 focus-visible:shadow-focus active:translate-y-0 lg:flex-row lg:items-center ${
         isHidden ? 'opacity-80' : ''
       }`}
     >
       {/* Title block */}
       <div className="flex items-start justify-between gap-2 lg:w-60 lg:flex-shrink-0 lg:flex-col lg:items-start lg:justify-center">
         <div className="min-w-0">
-          <h3 className="font-semibold leading-snug text-ink-primary">
+          <h3 className="font-semibold leading-snug text-ink-primary transition-colors group-hover:text-accent-700">
             {project.tenHienThi}
           </h3>
           <p className="mt-0.5 text-xs text-ink-muted">{project.id}</p>
@@ -161,8 +187,13 @@ function ProjectOpenCard({ project, onOpen, onEdit, onHide, onRestore }) {
         />
         <button
           type="button"
-          onClick={() => onOpen(project)}
-          className="flex items-center gap-1 text-sm font-medium text-accent-600 hover:text-accent-700 focus:outline-none"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen(project);
+          }}
+          tabIndex={-1}
+          aria-hidden="true"
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium text-accent-600 transition-colors group-hover:bg-accent-50 group-hover:text-accent-700"
         >
           Mở dự án
           <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
@@ -235,10 +266,25 @@ export default function WelcomeScreen({
   onHideProject,
   onRestoreProject,
 }) {
+  const { logout } = useAuth();
   const [filter, setFilter] = useState('visible');
   const [showContactAdmin, setShowContactAdmin] = useState(false);
   const [editing, setEditing] = useState(null);
   const [confirm, setConfirm] = useState(null); // { variant, project }
+  const [userMenu, setUserMenu] = useState(false);
+  const userMenuRef = useRef(null);
+
+  // Đóng menu user khi click ra ngoài.
+  useEffect(() => {
+    if (!userMenu) return;
+    const onDocClick = (e) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+        setUserMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [userMenu]);
 
   const visibleCount = projects.filter((p) => p.status === 'visible').length;
   const shown = projects.filter((p) =>
@@ -266,11 +312,50 @@ export default function WelcomeScreen({
               3
             </span>
           </button>
-          <div className="flex items-center gap-2 pl-1">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-100 text-sm font-semibold text-accent-700">
-              NA
-            </div>
-            <span className="text-sm font-medium text-ink-primary">{userName}</span>
+          <div className="relative pl-1" ref={userMenuRef}>
+            <button
+              type="button"
+              onClick={() => setUserMenu((v) => !v)}
+              aria-haspopup="menu"
+              aria-expanded={userMenu}
+              className="flex items-center gap-2 rounded-md py-1 pl-1 pr-2 hover:bg-surface-2"
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-100 text-sm font-semibold text-accent-700">
+                {initialsOf(userName)}
+              </div>
+              <span className="text-sm font-medium text-ink-primary">{userName}</span>
+              <ChevronDown
+                className={`h-4 w-4 text-ink-muted transition-transform ${
+                  userMenu ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+
+            {userMenu && (
+              <div
+                role="menu"
+                className="absolute right-0 z-30 mt-2 w-48 overflow-hidden rounded-lg border border-line bg-surface-1 shadow-md"
+              >
+                <div className="border-b border-line px-3 py-2">
+                  <p className="truncate text-sm font-medium text-ink-primary">
+                    {userName}
+                  </p>
+                  <p className="text-xs text-ink-muted">Đã đăng nhập</p>
+                </div>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setUserMenu(false);
+                    logout();
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-danger hover:bg-danger-bg"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Đăng xuất
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>

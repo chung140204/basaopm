@@ -1,33 +1,109 @@
-import { useMemo, useState } from 'react';
-import { Search } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Search, Columns3, Check } from 'lucide-react';
 import { ZONES, zoneOfCell, zoneName } from '../../data/cells';
-import { labelFor, getLayer } from '../../lib/layers';
-import { formatM2, formatCurrency } from '../../utils/format';
-import { useDbCells } from '../../hooks/useDbCells';
+import { useDbCells, normCellCode } from '../../hooks/useDbCells';
+import usePersistentState from '../../utils/usePersistentState';
+import { CELL_COLUMNS, DEFAULT_VISIBLE_COLUMNS } from './cellColumns';
 import CellDetailScreen from './CellDetailScreen';
 
-function colorOf(layerId, value) {
-  return getLayer(layerId).statuses.find((s) => s.value === value)?.fill ?? '#94A3B8';
-}
+// Panel chọn cột hiển thị (checkbox). Đóng khi click ra ngoài.
+function ColumnPicker({ visible, onToggle }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    window.addEventListener('mousedown', h);
+    return () => window.removeEventListener('mousedown', h);
+  }, [open]);
 
-function Dot({ layerId, value }) {
   return (
-    <span
-      className="inline-block h-2 w-2 flex-shrink-0 rounded-full"
-      style={{ backgroundColor: colorOf(layerId, value) }}
-    />
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 rounded-md border border-line bg-surface-1 px-3 py-1.5 text-sm font-medium text-ink-secondary hover:bg-surface-2"
+      >
+        <Columns3 className="h-4 w-4" />
+        Cột hiển thị
+      </button>
+      {open && (
+        <div className="absolute right-0 z-20 mt-1 max-h-[70vh] w-60 overflow-auto rounded-lg border border-line bg-surface-1 p-1.5 shadow-lg">
+          <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+            Chọn cột hiển thị
+          </p>
+          {CELL_COLUMNS.map((col) => {
+            const on = visible.includes(col.key);
+            return (
+              <button
+                key={col.key}
+                type="button"
+                disabled={col.locked}
+                onClick={() => onToggle(col.key)}
+                className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm ${
+                  col.locked
+                    ? 'cursor-default text-ink-muted'
+                    : 'text-ink-primary hover:bg-surface-2'
+                }`}
+              >
+                <span
+                  className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${
+                    on
+                      ? 'border-accent-600 bg-accent-600 text-white'
+                      : 'border-line bg-surface-1'
+                  }`}
+                >
+                  {on && <Check className="h-3 w-3" />}
+                </span>
+                {col.label}
+                {col.locked && <span className="ml-auto text-[10px]">cố định</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
 // Screen for "Quản lý theo ô": a filterable cell list. Clicking a row opens
 // the full-screen cell detail (with Pháp lý / Giao dịch tabs).
-export default function CellListScreen() {
+export default function CellListScreen({ initialCellCode, onConsumeInitial }) {
   // Dữ liệu ô THẬT từ DB (DCB02 merge + DCB09 append) — cùng nguồn với Bản đồ.
   const [cells] = useDbCells();
   const [zone, setZone] = useState('all'); // 'all' | 'khu-a' | 'khu-b'
   const [lot, setLot] = useState('all');
   const [query, setQuery] = useState('');
   const [selectedId, setSelectedId] = useState(null);
+  // Cột hiển thị (key list) — lưu localStorage, nhớ sau F5.
+  const [visibleCols, setVisibleCols] = usePersistentState(
+    'bpm.cellCols',
+    DEFAULT_VISIBLE_COLUMNS
+  );
+  const toggleCol = (key) =>
+    setVisibleCols((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  // Cột đang bật, GIỮ đúng thứ tự định nghĩa trong CELL_COLUMNS.
+  const shownColumns = CELL_COLUMNS.filter(
+    (c) => c.locked || visibleCols.includes(c.key)
+  );
+
+  // Deep link từ panel lô: mở sẵn chi tiết ô theo mã (one-shot). Chờ cells có
+  // mặt rồi khớp theo mã chuẩn hoá ('DCB02-1' ↔ 'DCB02-01'), sau đó tiêu thụ.
+  useEffect(() => {
+    if (!initialCellCode) return;
+    const target = normCellCode(initialCellCode);
+    const hit = cells.find(
+      (c) => normCellCode(c.properties.cellCode) === target
+    );
+    if (hit) {
+      setSelectedId(hit.id);
+      onConsumeInitial?.();
+    }
+  }, [initialCellCode, cells, onConsumeInitial]);
 
   // Lot codes available for the current zone filter (for the dropdown).
   const lotOptions = useMemo(() => {
@@ -114,6 +190,8 @@ export default function CellListScreen() {
             />
           </div>
 
+          <ColumnPicker visible={visibleCols} onToggle={toggleCol} />
+
           <span className="text-sm text-ink-muted">{rows.length} ô</span>
         </div>
 
@@ -121,22 +199,27 @@ export default function CellListScreen() {
         <div className="flex-1 overflow-auto p-6">
           <div className="overflow-hidden rounded-lg border border-line bg-surface-1">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="sticky top-0 z-10">
                 <tr className="border-b border-line bg-surface-2 text-left text-xs uppercase tracking-wide text-ink-muted">
-                  <th className="px-4 py-2.5 font-semibold">Mã ô</th>
-                  <th className="px-4 py-2.5 font-semibold">Mã lô</th>
-                  <th className="px-4 py-2.5 font-semibold">Phân khu</th>
-                  <th className="px-4 py-2.5 text-right font-semibold">Diện tích</th>
-                  <th className="px-4 py-2.5 font-semibold">Kinh doanh</th>
-                  <th className="px-4 py-2.5 font-semibold">Pháp lý</th>
-                  <th className="px-4 py-2.5 font-semibold">Thanh toán</th>
-                  <th className="px-4 py-2.5 text-right font-semibold">Giá trị</th>
+                  {shownColumns.map((col) => (
+                    <th
+                      key={col.key}
+                      className={`whitespace-nowrap px-4 py-2.5 font-semibold ${
+                        col.align === 'right' ? 'text-right' : ''
+                      }`}
+                    >
+                      {col.label}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
                 {rows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-10 text-center text-ink-muted">
+                    <td
+                      colSpan={shownColumns.length}
+                      className="px-4 py-10 text-center text-ink-muted"
+                    >
                       Không có ô nào khớp bộ lọc.
                     </td>
                   </tr>
@@ -152,37 +235,16 @@ export default function CellListScreen() {
                           active ? 'bg-accent-50' : 'hover:bg-surface-2'
                         }`}
                       >
-                        <td className="px-4 py-2.5 font-medium text-ink-primary">
-                          {p.cellCode}
-                        </td>
-                        <td className="px-4 py-2.5 text-ink-secondary">{p.lotCode}</td>
-                        <td className="px-4 py-2.5 text-ink-secondary">
-                          {zoneName(zoneOfCell(p))}
-                        </td>
-                        <td className="px-4 py-2.5 text-right tabular text-ink-secondary">
-                          {formatM2(p.area)}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <span className="flex items-center gap-1.5 text-ink-secondary">
-                            <Dot layerId="business" value={p.businessStatus} />
-                            {labelFor('business', p.businessStatus)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <span className="flex items-center gap-1.5 text-ink-secondary">
-                            <Dot layerId="legal" value={p.collateralStatus} />
-                            {labelFor('legal', p.collateralStatus)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <span className="flex items-center gap-1.5 text-ink-secondary">
-                            <Dot layerId="payment" value={p.paymentStatus} />
-                            {labelFor('payment', p.paymentStatus)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5 text-right tabular text-ink-secondary">
-                          {formatCurrency(p.value)}
-                        </td>
+                        {shownColumns.map((col) => (
+                          <td
+                            key={col.key}
+                            className={`px-4 py-2.5 text-ink-secondary ${
+                              col.align === 'right' ? 'text-right' : ''
+                            }`}
+                          >
+                            {col.render(p)}
+                          </td>
+                        ))}
                       </tr>
                     );
                   })

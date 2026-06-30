@@ -5,8 +5,6 @@
 // Layout DCA14 dựng theo sơ đồ bản vẽ: 1 cột trái (7 ô), 1 hàng trên (20 ô),
 // 1 cột phải (4 ô), 1 hàng dưới (20 ô). Coordinates: viewBox 0..1000 (y down).
 // Mã lô dùng dạng KHÔNG dấu chấm (DCA14, DCB05, DCB02).
-import { DCB05_RAW } from './cellsDCB05';
-import { DCB02_LAYOUT } from './dcb02Layout';
 import { KHUA_MOCK_RAW } from './cellsKhuAMock';
 
 // ---- Phân khu A / B (zone) -----------------------------------------------
@@ -346,38 +344,7 @@ function makeDumpCell(raw, lotCode, subdivisionId, x, y, w, h) {
   };
 }
 
-// Grid 8 cột cho 31 ô DCB05 (chỉ để hiển thị).
-{
-  const cols = 8;
-  const cw = 110;
-  const ch = 90;
-  const gx = 70;
-  const gy = 80;
-  DCB05_RAW.forEach((raw, i) => {
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    cells.push(
-      makeDumpCell(
-        raw,
-        'DCB05',
-        'dcb05',
-        gx + col * (cw + GAP),
-        gy + row * (ch + GAP),
-        cw,
-        ch
-      )
-    );
-  });
-}
-
-// ---- DCB02: 27 ô — bố cục sơ đồ từ dcb02Layout.js ------------------------
-// Khung lưới (vị trí + area) dựng từ layout tĩnh (DB không có bố cục bản vẽ);
-// dữ liệu nghiệp vụ (status/owner/contract...) để mặc định ở đây và được
-// useDbCells ghi đè bằng DB khi backend bật.
-for (const lo of DCB02_LAYOUT) {
-  const raw = { o: lo.o, cellCode: lo.cellCode, area: lo.area, business: 'unsold' };
-  cells.push(makeDumpCell(raw, 'DCB02', 'dcb02', lo.x, lo.y, lo.w, lo.h));
-}
+// DCB02, DCB05: dựng grid từ DB qua useDbCells (không còn data/layout tĩnh).
 
 // ---- 3 lô mock Khu A (DCA15/16/17): grid 8 cột mỗi lô ---------------------
 {
