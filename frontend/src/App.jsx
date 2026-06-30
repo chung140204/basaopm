@@ -83,31 +83,12 @@ export default function App() {
           }
         />
 
+        {/* Workspace: section optional (mặc định dashboard). 1 route cho cả 2. */}
         <Route
-          path="/projects/:projectId/:section"
+          path="/projects/:projectId/:section?"
           element={
             <ProtectedRoute>
-              <ProjectWorkspace
-                projects={projects}
-                showToast={showToast}
-                onSaveProject={handleSaveProject}
-                onHideProject={handleHideProject}
-                onRestoreProject={handleRestoreProject}
-              />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/projects/:projectId"
-          element={
-            <ProtectedRoute>
-              <ProjectWorkspace
-                projects={projects}
-                showToast={showToast}
-                onSaveProject={handleSaveProject}
-                onHideProject={handleHideProject}
-                onRestoreProject={handleRestoreProject}
-              />
+              <ProjectWorkspace projects={projects} showToast={showToast} />
             </ProtectedRoute>
           }
         />
