@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
+import { useAuth } from '../auth/AuthContext';
 
 const MAX_NAME = 120;
 const MAX_DESC = 500;
 
 export default function EditProjectModal({ project, onClose, onSave }) {
+  const { can } = useAuth();
   const [tenHienThi, setTenHienThi] = useState(project.tenHienThi);
   const [moTa, setMoTa] = useState(project.moTa ?? '');
   const [chuDauTu, setChuDauTu] = useState(project.chuDauTu ?? '');
@@ -231,14 +233,16 @@ export default function EditProjectModal({ project, onClose, onSave }) {
           >
             Hủy
           </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!canSave}
-            className="rounded-md bg-accent-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Lưu thay đổi
-          </button>
+          {can('project.edit') && (
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!canSave}
+              className="rounded-md bg-accent-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Lưu thay đổi
+            </button>
+          )}
         </div>
       </div>
     </div>

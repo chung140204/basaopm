@@ -75,14 +75,21 @@ export default function ProjectWorkspace({ projects, showToast }) {
         <Topbar title={breadcrumb} onMenuClick={() => setDrawerOpen(true)} />
 
         {section === 'dashboard' && <DashboardScreen project={project} />}
-        {section === 'map' && <MapScreen showToast={showToast} />}
+        {section === 'map' && (
+          <MapScreen showToast={showToast} projectId={projectId} />
+        )}
         {section === 'lot' && (
-          <LotListScreen showToast={showToast} onOpenCell={goToCell} />
+          <LotListScreen
+            showToast={showToast}
+            onOpenCell={goToCell}
+            projectId={projectId}
+          />
         )}
         {section === 'cell' && (
           <CellListScreen
             initialCellCode={pendingCellCode}
             onConsumeInitial={() => setPendingCellCode(null)}
+            projectId={projectId}
           />
         )}
       </div>

@@ -13,7 +13,7 @@ import CellDetailPanel from './CellDetailPanel';
 import EditCellModal from './EditCellModal';
 import DiscardDialog from './DiscardDialog';
 import { makeColorResolver } from '../../lib/layers';
-import { CELLS, SUBDIVISIONS, TOTAL_CELLS } from '../../data/cells';
+import { SUBDIVISIONS, zoneOfCell } from '../../data/cells';
 import { getRanhThuaAt, getRanhThuaLayers } from '../../services/planningApi';
 import { saveCell } from '../../services/cellsApi';
 import { useDbCells } from '../../hooks/useDbCells';
@@ -63,16 +63,18 @@ function countActiveFilters(filters) {
   return n;
 }
 
-export default function MapScreen({ showToast }) {
-  // Nạp dữ liệu ô THẬT từ DB (DCB02 merge + DCB09 append) — dùng hook chung
-  // với màn "Quản lý theo ô" để 2 màn cùng nguồn data.
-  const [cells, setCells] = useDbCells(CELLS);
+export default function MapScreen({ showToast, projectId }) {
+  // Nạp ô THẬT của dự án đang mở — dùng hook chung với màn "Quản lý theo ô".
+  const [cells, setCells, cellsReady] = useDbCells(projectId, []);
+  // Dự án có dữ liệu bản đồ không (để bật/tắt lớp ranh thửa).
+  const projectHasCells = cellsReady && cells.length > 0;
   const [activeLayerId, setActiveLayerId] = useState('business');
-  // TẠM THỜI: mặc định TẮT lớp ranh thửa (cần backend PostGIS) để bản đồ vẽ
-  // lớp ô tĩnh (CELLS) có màu trạng thái ngay, không phụ thuộc backend.
-  // Ranh thửa BẬT sẵn khi vào bản đồ (layer tự chọn trong LeafletMapCanvas);
-  // người dùng vẫn tắt được trên toolbar nếu muốn.
-  const [showRanhThua, setShowRanhThua] = useState(true);
+  // Lớp ranh thửa: chỉ bật khi dự án CÓ dữ liệu bản đồ. Dự án rỗng → tắt hẳn
+  // (không vẽ ranh thửa của dự án khác). User vẫn bật/tắt tay trên toolbar.
+  const [showRanhThua, setShowRanhThua] = useState(false);
+  useEffect(() => {
+    setShowRanhThua(projectHasCells);
+  }, [projectHasCells]);
   const [showLo, setShowLo] = useState(false);
   const [showLoThua, setShowLoThua] = useState(false); // bật/tắt tile lô thửa
   const [selectedLoId, setSelectedLoId] = useState(null);
@@ -101,24 +103,38 @@ export default function MapScreen({ showToast }) {
         const selected = filters[g.key];
         // All selected → no constraint for this group.
         if (selected.size === g.options.length) continue;
-        const v = feature.properties[g.key];
+        // Phân khu: suy khu (khu-a/khu-b) qua zoneOfCell (fallback theo mã lô)
+        // vì ô tĩnh có thể không có sẵn field zone.
+        const v =
+          g.key === 'zone'
+            ? zoneOfCell(feature.properties)
+            : feature.properties[g.key];
         if (!selected.has(v)) return false;
       }
       return true;
     };
   }, [filters]);
 
-  // Predicate lọc RANH THỬA: dùng trạng thái mock (statusValue). Bỏ qua nhóm
-  // phân khu (ranh thửa không có). Within group OR, across groups AND.
+  // Predicate lọc RANH THỬA. Within group OR, across groups AND.
+  //  - Nhóm trạng thái (KD/pháp lý/thanh toán): dùng statusValue.
+  //  - Nhóm 'zone' (Khu A/B): suy khu từ mã lô (meta.lotCode). Thửa CHƯA gán lô
+  //    (không có lotCode) → "vô khu" → KHÔNG bị lọc khu (luôn hiện).
   const ranhThuaFilter = useMemo(() => {
     const STATUS_KEYS = ['businessStatus', 'collateralStatus', 'paymentStatus'];
     return (feature) => {
       for (const g of GROUPS) {
-        if (!STATUS_KEYS.includes(g.key)) continue; // bỏ phân khu
         const selected = filters[g.key];
-        if (selected.size === g.options.length) continue; // không ràng buộc
-        const v = statusValue(feature, g.key);
-        if (!selected.has(v)) return false;
+        if (selected.size === g.options.length) continue; // chọn hết → không ràng buộc
+        if (g.key === 'zone') {
+          // Zone THẬT từ DB (meta.zone, gộp từ subdivision). Thửa chưa gán zone
+          // → "vô khu" → luôn hiện (không đoán theo mã lô hardcode nữa).
+          const zone = feature?.meta?.zone;
+          if (!zone) continue;
+          if (!selected.has(zone)) return false;
+        } else if (STATUS_KEYS.includes(g.key)) {
+          if (!selected.has(statusValue(feature, g.key))) return false;
+        }
+        // nhóm khác (nếu có) → bỏ qua cho ranh thửa
       }
       return true;
     };
@@ -214,11 +230,13 @@ export default function MapScreen({ showToast }) {
     let cancelled = false;
     getRanhThuaLayers().then((layers) => {
       if (cancelled || !layers.length) return;
-      // Lớp ranh thửa Chí Linh gốc (nhiều ô nhất, không phải DCCB).
-      const best = layers
-        .filter((l) => l.id !== 'dccb-chialo')
-        .reduce((a, b) => ((b.features ?? 0) > (a.features ?? 0) ? b : a),
-          layers.find((l) => l.id !== 'dccb-chialo') || layers[0]);
+      // Chọn lớp ranh thửa có nhiều ô nhất làm mặc định.
+      // (Layer 'dccb-chialo' đã được xoá khỏi DB; giữ fallback an toàn phòng
+      // trường hợp có layer rác khác được import về sau.)
+      const best = layers.reduce(
+        (a, b) => ((b.features ?? 0) > (a.features ?? 0) ? b : a),
+        layers[0]
+      );
       setRanhThuaLayerId(best.id);
     });
     return () => {
@@ -269,6 +287,7 @@ export default function MapScreen({ showToast }) {
           bao giờ đè lên topbar/sidebar ở ngoài. */}
       <div className="relative flex-1 overflow-hidden isolate">
         <MapCanvas
+          projectId={projectId}
           features={cells}
           // Lớp ô tĩnh (CELLS) đã tắt hẳn — bản đồ chỉ dùng nền + ranh phân khu
           // (và lớp ranh thửa thật từ backend khi bật).
@@ -289,7 +308,8 @@ export default function MapScreen({ showToast }) {
               ? activeLayerId
               : 'business'
           }
-          ranhThuaFilter={hideUnmatched ? ranhThuaFilter : null}
+          ranhThuaFilter={ranhThuaFilter}
+          ranhThuaHideUnmatched={true}
           showRanhThuaSubdivisions={false}
           showLo={showLo}
           selectedLoId={selectedLoId}
@@ -348,8 +368,12 @@ export default function MapScreen({ showToast }) {
           <MapLegend activeLayerId={activeLayerId} features={matched} />
         </div>
 
-        {/* Empty filter overlay */}
-        {matched.length === 0 && (
+        {/* Empty filter overlay — chỉ hiện khi:
+            - đã load xong (cellsReady) — tránh nháy "trống" lúc reload đang tải;
+            - KHÔNG đang xem ranh thửa thật (lớp ranh thửa có nguồn dữ liệu riêng,
+              không phụ thuộc `matched` của grid ô — nếu không overlay sẽ che mất
+              bản đồ ranh thửa khi reload dự án có dữ liệu). */}
+        {cellsReady && !showRanhThua && matched.length === 0 && (
           <div className="absolute inset-0 z-[450] flex flex-col items-center justify-center gap-3 bg-surface-2/70 text-center">
             <SearchIcon className="h-8 w-8 text-ink-muted" />
             <p className="text-base font-medium text-ink-primary">
@@ -373,10 +397,10 @@ export default function MapScreen({ showToast }) {
           filters={filters}
           onToggle={toggleFilterOption}
           onReset={resetFilters}
-          hideUnmatched={hideUnmatched}
-          onToggleHide={() => setHideUnmatched((h) => !h)}
           matchCount={matched.length}
-          total={TOTAL_CELLS}
+          // Tổng = số ô THỰC TẾ đang có (cùng nguồn với matched) để tránh
+          // "khớp > tổng" khi data DB khác hằng số tĩnh TOTAL_CELLS.
+          total={cells.length}
           pinned={filterPinned}
           onTogglePin={() => setFilterPinned((p) => !p)}
           onClose={() => setFilterOpen(false)}

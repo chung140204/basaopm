@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, Columns3, Check } from 'lucide-react';
 import { ZONES, zoneOfCell, zoneName } from '../../data/cells';
 import { useDbCells, normCellCode } from '../../hooks/useDbCells';
+import { Skeleton } from '../common/Skeleton';
 import usePersistentState from '../../utils/usePersistentState';
 import { CELL_COLUMNS, DEFAULT_VISIBLE_COLUMNS } from './cellColumns';
 import CellDetailScreen from './CellDetailScreen';
@@ -123,9 +124,9 @@ function MobileCellCard({ cell, active, onClick }) {
 
 // Screen for "Quản lý theo ô": a filterable cell list. Clicking a row opens
 // the full-screen cell detail (with Pháp lý / Giao dịch tabs).
-export default function CellListScreen({ initialCellCode, onConsumeInitial }) {
-  // Dữ liệu ô THẬT từ DB (DCB02 merge + DCB09 append) — cùng nguồn với Bản đồ.
-  const [cells] = useDbCells();
+export default function CellListScreen({ initialCellCode, onConsumeInitial, projectId }) {
+  // Ô THẬT của dự án đang mở — cùng nguồn với Bản đồ. ready=false khi đang tải.
+  const [cells, , ready] = useDbCells(projectId, []);
   const [zone, setZone] = useState('all'); // 'all' | 'khu-a' | 'khu-b'
   const [lot, setLot] = useState('all');
   const [query, setQuery] = useState('');
@@ -255,7 +256,15 @@ export default function CellListScreen({ initialCellCode, onConsumeInitial }) {
         <div className="flex-1 overflow-auto p-4 md:p-6">
           {/* Card list — chỉ mobile (<md) */}
           <div className="space-y-3 md:hidden">
-            {rows.length === 0 ? (
+            {!ready && rows.length === 0 ? (
+              /* Đang tải → thẻ skeleton. */
+              Array.from({ length: 5 }).map((_, i) => (
+                <div key={`sk-${i}`} className="rounded-lg border border-line bg-surface-1 p-3">
+                  <Skeleton className="mb-2 h-4 w-28" />
+                  <Skeleton className="h-3.5 w-full" />
+                </div>
+              ))
+            ) : rows.length === 0 ? (
               <p className="py-10 text-center text-ink-muted">
                 Không có ô nào khớp bộ lọc.
               </p>
@@ -289,7 +298,18 @@ export default function CellListScreen({ initialCellCode, onConsumeInitial }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
-                {rows.length === 0 ? (
+                {!ready && rows.length === 0 ? (
+                  /* Đang tải → hàng skeleton shimmer thay vì "không có ô". */
+                  Array.from({ length: 8 }).map((_, i) => (
+                    <tr key={`sk-${i}`}>
+                      {shownColumns.map((col) => (
+                        <td key={col.key} className="px-4 py-3">
+                          <Skeleton className="h-3.5 w-full" />
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                ) : rows.length === 0 ? (
                   <tr>
                     <td
                       colSpan={shownColumns.length}

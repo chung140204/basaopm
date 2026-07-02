@@ -11,6 +11,7 @@ import {
   Grid3x3,
 } from 'lucide-react';
 import Badge from './Badge';
+import { useAuth } from '../auth/AuthContext';
 import {
   formatInteger,
   formatAreaFull,
@@ -49,6 +50,7 @@ function IconButton({ icon: Icon, label, tone = 'default', onClick }) {
 }
 
 export default function ProjectCard({ project, onEdit, onHide, onRestore }) {
+  const { can } = useAuth();
   const isHidden = project.status === 'hidden';
 
   // Build the lot text: "50 lô (Khu A: 31 · Khu B: 19)"
@@ -107,28 +109,34 @@ export default function ProjectCard({ project, onEdit, onHide, onRestore }) {
       {/* Actions */}
       <div className="flex items-center justify-end gap-1 border-t border-line pt-3 lg:flex-shrink-0 lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0">
         <IconButton icon={Eye} label="Xem chi tiết" />
-        {isHidden ? (
-          <IconButton
-            icon={RotateCw}
-            label="Khôi phục dự án"
-            tone="accent"
-            onClick={() => onRestore(project)}
-          />
-        ) : (
-          <>
-            <IconButton
-              icon={Pencil}
-              label="Sửa thông tin"
-              onClick={() => onEdit(project)}
-            />
-            <IconButton
-              icon={EyeOff}
-              label="Ẩn dự án"
-              tone="warning"
-              onClick={() => onHide(project)}
-            />
-          </>
-        )}
+        {isHidden
+          ? can('project.hide') && (
+              <IconButton
+                icon={RotateCw}
+                label="Khôi phục dự án"
+                tone="accent"
+                onClick={() => onRestore(project)}
+              />
+            )
+          : (
+            <>
+              {can('project.edit') && (
+                <IconButton
+                  icon={Pencil}
+                  label="Sửa thông tin"
+                  onClick={() => onEdit(project)}
+                />
+              )}
+              {can('project.hide') && (
+                <IconButton
+                  icon={EyeOff}
+                  label="Ẩn dự án"
+                  tone="warning"
+                  onClick={() => onHide(project)}
+                />
+              )}
+            </>
+          )}
       </div>
     </div>
   );

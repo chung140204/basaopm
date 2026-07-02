@@ -4,6 +4,7 @@
 //    GET /api/ranh-thua/geojson  → cả lớp, vẽ polyline mọi ô
 //    GET /api/ranh-thua/at       → point-in-polygon, trả thửa chứa điểm click
 //    GET /api/ranh-thua/layers   → center để bay tới
+import { authHeader } from './authApi';
 
 const PLANNING_TILE_URL =
   import.meta.env.VITE_API_URL_PLANNING_TILE || 'https://api-planning-basata.basao.com';
@@ -154,7 +155,7 @@ export async function saveLoMeta(loId, meta) {
   try {
     const res = await fetch(`${RANH_THUA_API}/api/lo/${loId}/meta`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
       body: JSON.stringify({ meta }),
     });
     return res.ok;
@@ -174,7 +175,7 @@ export async function saveRanhThuaMeta(plotId, meta) {
   try {
     const res = await fetch(`${RANH_THUA_API}/api/ranh-thua/${plotId}/meta`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
       body: JSON.stringify({ meta }),
     });
     return res.ok;

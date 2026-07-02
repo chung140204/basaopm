@@ -37,8 +37,8 @@ ROLES = {
     "admin": {
         "label": "Admin",
         "permissions": [
-            "project.view", "project.edit", "project.hide",
-            "cell.view", "cell.edit", "lot.view", "lot.edit",
+            # Admin CHỈ XEM (không sửa/ẩn). Chỉ superadmin mới chỉnh sửa.
+            "project.view", "cell.view", "lot.view",
         ],
     },
     # Ví dụ role hạn chế (chỉ xem) — minh hoạ "có thể thêm role".
@@ -143,3 +143,30 @@ def require_permission(perm: str):
             raise HTTPException(status_code=403, detail="Không đủ quyền")
         return user
     return _dep
+
+
+# --- Phân quyền theo DỰ ÁN -------------------------------------------------
+def user_project_codes(cur, user: dict) -> list:
+    """Danh sách code dự án user được xem.
+    superadmin → mọi project active; còn lại → từ bảng user_project."""
+    if user["role"] == "superadmin":
+        cur.execute("SELECT code FROM project WHERE is_active ORDER BY code")
+    else:
+        cur.execute(
+            "SELECT p.code FROM user_project up "
+            "JOIN project p ON p.code = up.project_code "
+            "WHERE up.user_id = %s AND p.is_active ORDER BY p.code",
+            (user["id"],),
+        )
+    return [r[0] for r in cur.fetchall()]
+
+
+def user_can_access_project(cur, user: dict, project_code: str) -> bool:
+    """superadmin luôn true; còn lại check user_project."""
+    if user["role"] == "superadmin":
+        return True
+    cur.execute(
+        "SELECT 1 FROM user_project WHERE user_id = %s AND project_code = %s",
+        (user["id"], project_code),
+    )
+    return cur.fetchone() is not None

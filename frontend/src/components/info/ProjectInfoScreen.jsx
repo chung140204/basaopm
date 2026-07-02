@@ -3,6 +3,7 @@ import { Pencil, EyeOff, RotateCw, Building2, MapPin, Ruler, Grid3x3, LayoutGrid
 import Badge from '../Badge';
 import EditProjectModal from '../EditProjectModal';
 import ConfirmDialog from '../ConfirmDialog';
+import { useAuth } from '../../auth/AuthContext';
 import {
   formatInteger,
   formatAreaFull,
@@ -24,6 +25,7 @@ function Field({ icon: Icon, label, children }) {
 }
 
 export default function ProjectInfoScreen({ project, onSave, onHide, onRestore }) {
+  const { can } = useAuth();
   const [editing, setEditing] = useState(false);
   const [confirm, setConfirm] = useState(null); // 'hide' | 'restore'
 
@@ -48,33 +50,36 @@ export default function ProjectInfoScreen({ project, onSave, onHide, onRestore }
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="flex items-center gap-2 rounded-md border border-line bg-surface-1 px-4 py-2 text-sm font-medium text-ink-secondary hover:bg-surface-2"
-          >
-            <Pencil className="h-4 w-4" />
-            Sửa thông tin
-          </button>
-          {isHidden ? (
+          {can('project.edit') && (
             <button
               type="button"
-              onClick={() => setConfirm('restore')}
-              className="flex items-center gap-2 rounded-md bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-700"
+              onClick={() => setEditing(true)}
+              className="flex items-center gap-2 rounded-md border border-line bg-surface-1 px-4 py-2 text-sm font-medium text-ink-secondary hover:bg-surface-2"
             >
-              <RotateCw className="h-4 w-4" />
-              Khôi phục
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirm('hide')}
-              className="flex items-center gap-2 rounded-md border border-line bg-surface-1 px-4 py-2 text-sm font-medium text-warning hover:bg-warning-bg"
-            >
-              <EyeOff className="h-4 w-4" />
-              Ẩn dự án
+              <Pencil className="h-4 w-4" />
+              Sửa thông tin
             </button>
           )}
+          {can('project.hide') &&
+            (isHidden ? (
+              <button
+                type="button"
+                onClick={() => setConfirm('restore')}
+                className="flex items-center gap-2 rounded-md bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-700"
+              >
+                <RotateCw className="h-4 w-4" />
+                Khôi phục
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirm('hide')}
+                className="flex items-center gap-2 rounded-md border border-line bg-surface-1 px-4 py-2 text-sm font-medium text-warning hover:bg-warning-bg"
+              >
+                <EyeOff className="h-4 w-4" />
+                Ẩn dự án
+              </button>
+            ))}
         </div>
       </div>
 

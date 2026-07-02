@@ -9,6 +9,7 @@ import {
 } from '../../utils/format';
 import { getCellDetail } from '../../services/cellsApi';
 import ResponsiveSidePanel from '../common/ResponsiveSidePanel';
+import { useAuth } from '../../auth/AuthContext';
 
 const TABS = [
   { key: 'identity', label: 'Định danh' },
@@ -40,10 +41,16 @@ function colorOf(layerId, value) {
 const subName = (id) => SUBDIVISIONS.find((s) => s.id === id)?.name ?? id;
 
 // Nhãn tiếng Việt cho các enum DB (book/construction/legal_event).
+// BOOK_LABEL đồng bộ với data/enumLabels.js + lib/layers.js (lớp 'legal') +
+// CHECK constraint ck_cell_book trong DB.
 const BOOK_LABEL = {
-  none: 'Chưa cấp sổ',
-  issued_transferred: 'Đã có sổ - chuyển giao',
-  issued_in_progress: 'Đã có sổ - đang giao dịch',
+  no_book_ineligible: 'Chưa cấp sổ - Không đủ điều kiện',
+  no_book_eligible: 'Chưa cấp sổ - Đủ điều kiện',
+  book_in_progress: 'Đang làm thủ tục cấp sổ',
+  book_held_investor: 'Đã có sổ - Do CĐT cầm',
+  book_transferred: 'Đã có sổ - Chuyển giao cho chủ sở hữu',
+  book_in_transaction: 'Đã có sổ - Đang giao dịch tài chính / pháp lý',
+  book_split: 'Đã có sổ - Đổi/Tách từ sổ cũ',
 };
 const CONSTRUCTION_LABEL = {
   not_handed_over: 'Chưa giao',
@@ -75,6 +82,7 @@ function Row({ label, children, locked }) {
 }
 
 export default function CellDetailPanel({ feature, onClose, onEdit }) {
+  const { can } = useAuth();
   const [tab, setTab] = useState('identity');
   const [detail, setDetail] = useState(null); // chi tiết DB: contract/payments/mortgage/legal
   const p = feature.properties;
@@ -187,8 +195,16 @@ export default function CellDetailPanel({ feature, onClose, onEdit }) {
 
         {tab === 'legal' && (
           <div className="py-1">
+            {/* Trạng thái cấp sổ — khớp lớp bản đồ 'Pháp lý / tài sản bảo đảm'
+                (lib/layers.js dùng field bookStatus). */}
+            <Row label="Trạng thái sổ" locked>
+              <StatusBadge
+                layerId="legal"
+                value={detail?.bookStatus ?? p.bookStatus}
+              />
+            </Row>
             <Row label="Tài sản bảo đảm" locked>
-              <StatusBadge layerId="legal" value={p.collateralStatus} />
+              <StatusBadge layerId="collateral" value={p.collateralStatus} />
             </Row>
             <Row label="Pháp lý nội bộ">{detail?.internalLegal ?? p.internalLegal ?? '—'}</Row>
             {detail?.mortgage && (
@@ -313,28 +329,32 @@ export default function CellDetailPanel({ feature, onClose, onEdit }) {
                 ))}
               </ul>
             )}
-            <button
-              type="button"
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-line py-2 text-sm text-ink-muted hover:bg-surface-2"
-            >
-              <Upload className="h-4 w-4" />
-              Tải lên hồ sơ
-            </button>
+            {can('cell.edit') && (
+              <button
+                type="button"
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-line py-2 text-sm text-ink-muted hover:bg-surface-2"
+              >
+                <Upload className="h-4 w-4" />
+                Tải lên hồ sơ
+              </button>
+            )}
           </div>
         )}
       </div>
 
-      {/* Footer action */}
-      <div className="border-t border-line p-3">
-        <button
-          type="button"
-          onClick={() => onEdit(feature)}
-          className="flex w-full items-center justify-center gap-2 rounded-md bg-accent-600 py-2 text-sm font-medium text-white hover:bg-accent-700"
-        >
-          <Pencil className="h-4 w-4" />
-          Cập nhật thông tin ô
-        </button>
-      </div>
+      {/* Footer action — chỉ hiện với người có quyền sửa ô */}
+      {can('cell.edit') && (
+        <div className="border-t border-line p-3">
+          <button
+            type="button"
+            onClick={() => onEdit(feature)}
+            className="flex w-full items-center justify-center gap-2 rounded-md bg-accent-600 py-2 text-sm font-medium text-white hover:bg-accent-700"
+          >
+            <Pencil className="h-4 w-4" />
+            Cập nhật thông tin ô
+          </button>
+        </div>
+      )}
     </ResponsiveSidePanel>
   );
 }

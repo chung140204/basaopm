@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { X, Info } from 'lucide-react';
+import { useAuth } from '../../auth/AuthContext';
 
 // Edit a lot's management fields: mã lô, mô tả, ghi chú.
 // Area / child cells / shape are derived from cells → read-only.
 export default function EditLotModal({ lot, onClose, onSave }) {
+  const { can } = useAuth();
   const [lotCode, setLotCode] = useState(lot.lotCode);
   const [description, setDescription] = useState(lot.description ?? '');
   const [note, setNote] = useState(lot.note ?? '');
@@ -130,14 +132,16 @@ export default function EditLotModal({ lot, onClose, onSave }) {
           >
             Hủy
           </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!canSave}
-            className="rounded-md bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Lưu thay đổi
-          </button>
+          {can('lot.edit') && (
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!canSave}
+              className="rounded-md bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Lưu thay đổi
+            </button>
+          )}
         </div>
       </div>
     </div>

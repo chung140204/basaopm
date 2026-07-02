@@ -40,7 +40,7 @@ export default function MapToolbar({
           <>
             <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
             <div className="absolute left-0 top-full z-20 mt-1 w-64 overflow-hidden rounded-md border border-line bg-surface-1 py-1 shadow-md">
-              {LAYERS.map((l) => (
+              {LAYERS.filter((l) => !l.hideOnMap).map((l) => (
                 <button
                   key={l.id}
                   type="button"

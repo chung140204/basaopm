@@ -7,6 +7,7 @@ import Toast from './components/Toast';
 import { PROJECTS } from './data/projects';
 import usePersistentState from './utils/usePersistentState';
 import { useAuth } from './auth/AuthContext';
+import { useProjectAccess } from './hooks/useProjectAccess';
 
 // Spinner dùng chung cho trạng thái đang khôi phục phiên.
 function Spinner() {
@@ -18,10 +19,13 @@ function Spinner() {
 }
 
 // Chặn route khi chưa đăng nhập → chuyển về /login.
-function ProtectedRoute({ children }) {
+// accessReady: chờ quyền dự án (DB) load xong mới render — tránh chặn nhầm
+// dự án khi danh sách được phép chưa kịp về.
+function ProtectedRoute({ children, accessReady = true }) {
   const { isAuthed, loading } = useAuth();
   if (loading) return <Spinner />;
   if (!isAuthed) return <Navigate to="/login" replace />;
+  if (!accessReady) return <Spinner />;
   return children;
 }
 
@@ -36,9 +40,15 @@ function LoginRoute() {
 export default function App() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  // Dữ liệu dự án phải sống qua F5 → vẫn lưu localStorage.
+  // Kho dự án (mock + chỉnh sửa/ẩn local). Sống qua F5 → localStorage.
   const [projects, setProjects] = usePersistentState('bpm.projects', PROJECTS);
   const [toast, setToast] = useState(null);
+
+  // Quyền xem dự án (từ DB): admin chỉ thấy dự án được gán; superadmin thấy hết.
+  const { allowedIds, isSuperadmin, ready: accessReady } = useProjectAccess();
+  const visibleProjects = isSuperadmin
+    ? projects
+    : projects.filter((p) => allowedIds.has(p.id));
 
   const USER_NAME = user?.fullName || user?.email || 'Người dùng';
   const showToast = (message) => setToast({ message, id: Math.random() });
@@ -69,9 +79,9 @@ export default function App() {
         <Route
           path="/projects"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute accessReady={accessReady}>
               <WelcomeScreen
-                projects={projects}
+                projects={visibleProjects}
                 userName={USER_NAME}
                 // Mở dự án = điều hướng bằng URL.
                 onOpenProject={(p) => navigate(`/projects/${p.id}`)}
@@ -87,8 +97,8 @@ export default function App() {
         <Route
           path="/projects/:projectId/:section?"
           element={
-            <ProtectedRoute>
-              <ProjectWorkspace projects={projects} showToast={showToast} />
+            <ProtectedRoute accessReady={accessReady}>
+              <ProjectWorkspace projects={visibleProjects} showToast={showToast} />
             </ProtectedRoute>
           }
         />

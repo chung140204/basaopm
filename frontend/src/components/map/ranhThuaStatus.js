@@ -7,6 +7,9 @@ const DEFAULTS = {
   businessStatus: 'unsold',
   collateralStatus: 'none',
   paymentStatus: 'unpaid',
+  // Lớp 'Pháp lý / tài sản bảo đảm' nay theo trạng thái CẤP SỔ. Thửa chưa có
+  // dữ liệu → mặc định "Chưa cấp sổ - Không đủ điều kiện".
+  bookStatus: 'no_book_ineligible',
 };
 
 /** Trạng thái mặc định cho 1 thửa (không random). */

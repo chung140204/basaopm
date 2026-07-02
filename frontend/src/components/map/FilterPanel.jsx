@@ -1,21 +1,19 @@
 import { useState } from 'react';
 import { X, Pin, ChevronDown, RotateCcw } from 'lucide-react';
 import { LAYERS } from '../../lib/layers';
-import { SUBDIVISIONS } from '../../data/cells';
+import { ZONES } from '../../data/cells';
 import { formatInteger } from '../../utils/format';
 import ResponsiveSidePanel from '../common/ResponsiveSidePanel';
 
 // Filter groups derive from layer definitions (business/legal/payment) plus
-// subdivision. Each group is multi-select. All-selected within a group = no
+// phân khu. Each group is multi-select. All-selected within a group = no
 // constraint. Within a group OR; across groups AND.
 const GROUPS = [
   {
-    key: 'subdivisionId',
+    // Phân khu = Khu A / Khu B (gộp các lô theo zone, không liệt kê từng lô).
+    key: 'zone',
     label: 'Phân khu',
-    options: SUBDIVISIONS.map((s) => ({
-      value: s.id,
-      label: `${s.name} (${s.lotCount} lô)`,
-    })),
+    options: ZONES.map((z) => ({ value: z.id, label: z.name })),
   },
   ...['business', 'legal', 'payment'].map((id) => {
     const layer = LAYERS.find((l) => l.id === id);
@@ -79,8 +77,6 @@ export default function FilterPanel({
   filters,
   onToggle,
   onReset,
-  hideUnmatched,
-  onToggleHide,
   matchCount,
   total,
   pinned,
@@ -127,16 +123,6 @@ export default function FilterPanel({
             onToggle={onToggle}
           />
         ))}
-
-        <label className="flex cursor-pointer items-center gap-2.5 px-1 py-3 text-sm text-ink-secondary">
-          <input
-            type="checkbox"
-            checked={hideUnmatched}
-            onChange={onToggleHide}
-            className="h-4 w-4 rounded border-line text-accent-600 focus:ring-accent-500"
-          />
-          Ẩn hẳn ô không khớp
-        </label>
       </div>
 
       {/* Footer */}

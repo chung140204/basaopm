@@ -32,7 +32,10 @@ export default function AreaBreakdownBar({ layerId, data, label }) {
 }
 
 // Legend + numbers list version, for the detail panel.
-export function AreaBreakdownList({ layerId, data }) {
+// `textOnly`: bỏ chấm màu, chỉ hiển thị nhãn + diện tích dạng thống kê text.
+// Dùng cho nhóm pháp lý định danh / pháp lý - tài chính — vì màu ô con trên
+// bản đồ chỉ phản ánh tình trạng KINH DOANH, nên các nhóm này không gắn màu.
+export function AreaBreakdownList({ layerId, data, textOnly = false }) {
   const layer = getLayer(layerId);
   const segments = layer.statuses
     .map((s) => ({ ...s, area: data[s.value] ?? 0 }))
@@ -47,10 +50,12 @@ export function AreaBreakdownList({ layerId, data }) {
       {segments.map((s) => (
         <li key={s.value} className="flex items-center justify-between gap-2 text-sm">
           <span className="flex items-center gap-2 text-ink-secondary">
-            <span
-              className="h-2.5 w-2.5 flex-shrink-0 rounded-sm"
-              style={{ backgroundColor: s.fill }}
-            />
+            {!textOnly && (
+              <span
+                className="h-2.5 w-2.5 flex-shrink-0 rounded-sm"
+                style={{ backgroundColor: s.fill }}
+              />
+            )}
             {s.label}
           </span>
           <span className="tabular font-medium text-ink-primary">{formatM2(s.area)}</span>

@@ -14,10 +14,16 @@ export const CONSTRUCTION_LABEL = {
   built: 'Đã xây dựng',
 };
 
+// Trạng thái cấp sổ (book_status) — đồng bộ với lớp 'legal' trong lib/layers.js
+// và CHECK constraint ck_cell_book trong DB.
 export const BOOK_LABEL = {
-  none: 'Chưa cấp sổ',
-  issued_transferred: 'Đã có sổ - chuyển giao cho chủ sở hữu',
-  issued_in_progress: 'Đã có sổ - đang giao dịch tài chính/pháp lý',
+  no_book_ineligible: 'Chưa cấp sổ - Không đủ điều kiện',
+  no_book_eligible: 'Chưa cấp sổ - Đủ điều kiện',
+  book_in_progress: 'Đang làm thủ tục cấp sổ',
+  book_held_investor: 'Đã có sổ - Do CĐT cầm',
+  book_transferred: 'Đã có sổ - Chuyển giao cho chủ sở hữu',
+  book_in_transaction: 'Đã có sổ - Đang giao dịch tài chính / pháp lý',
+  book_split: 'Đã có sổ - Đổi/Tách từ sổ cũ',
 };
 
 export const BUSINESS_LABEL = {
@@ -44,6 +50,7 @@ export const COLLATERAL_LABEL = {
 export const TAX_BEARER_LABEL = {
   customer: 'Khách hàng',
   investor: 'Chủ đầu tư',
+  has_vat: 'Có VAT',
 };
 
 export const MORTGAGE_STATE_LABEL = {

@@ -5,6 +5,8 @@
 //   GET /api/cells-geojson?lot=...  → GeoJSON các ô đã map geom (vẽ layer)
 //   PUT /api/cells/{cellCode}       → cập nhật field phẳng (partial)
 
+import { authHeader } from './authApi';
+
 const RANH_THUA_API =
   import.meta.env.VITE_API_URL_RANH_THUA || 'http://localhost:8000';
 
@@ -13,8 +15,11 @@ const RANH_THUA_API =
  * @param {string} [lot] mã lô, vd 'DCB02'
  * @returns {Promise<Array<object>>} [] nếu backend chưa chạy.
  */
-export async function getCells(lot) {
-  const qs = lot ? `?lot=${encodeURIComponent(lot)}` : '';
+export async function getCells(lot, project) {
+  const p = new URLSearchParams();
+  if (project) p.set('project', project);
+  else if (lot) p.set('lot', lot);
+  const qs = p.toString() ? `?${p}` : '';
   try {
     const res = await fetch(`${RANH_THUA_API}/api/cells${qs}`, {
       headers: { Accept: 'application/json' },
@@ -50,8 +55,11 @@ export async function getCellDetail(cellCode) {
  * @param {string} [lot]
  * @returns {Promise<object|null>} FeatureCollection hoặc null.
  */
-export async function getCellsGeoJSON(lot) {
-  const qs = lot ? `?lot=${encodeURIComponent(lot)}` : '';
+export async function getCellsGeoJSON(lot, project) {
+  const p = new URLSearchParams();
+  if (project) p.set('project', project);
+  else if (lot) p.set('lot', lot);
+  const qs = p.toString() ? `?${p}` : '';
   try {
     const res = await fetch(`${RANH_THUA_API}/api/cells-geojson${qs}`, {
       headers: { Accept: 'application/json' },
@@ -75,7 +83,7 @@ export async function saveCell(cellCode, patch) {
       `${RANH_THUA_API}/api/cells/${encodeURIComponent(cellCode)}`,
       {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeader() },
         body: JSON.stringify(patch),
       }
     );

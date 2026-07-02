@@ -2,6 +2,18 @@
 const API =
   import.meta.env.VITE_API_URL_RANH_THUA || 'http://localhost:8000';
 
+// Khoá token trong localStorage (khớp TOKEN_KEY ở AuthContext).
+const TOKEN_KEY = 'bpm.token';
+
+/**
+ * Header Authorization từ token đã đăng nhập (rỗng nếu chưa đăng nhập).
+ * Dùng cho các request GHI cần xác thực (PUT/POST) ở các service khác.
+ */
+export function authHeader() {
+  const t = localStorage.getItem(TOKEN_KEY);
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
 async function jsonOrThrow(res) {
   let data = null;
   try {
@@ -35,6 +47,14 @@ export async function apiMe(token) {
 export async function apiAuthMeta() {
   const res = await fetch(`${API}/api/auth/meta`);
   return jsonOrThrow(res); // { roles, permissions }
+}
+
+// Dự án user được phép xem (gating tầng dự án).
+export async function apiMyProjects(token) {
+  const res = await fetch(`${API}/api/projects`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return jsonOrThrow(res); // { projects, projectIds, isSuperadmin }
 }
 
 export async function apiListUsers(token) {

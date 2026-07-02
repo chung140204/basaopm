@@ -1,11 +1,8 @@
-// Hook dùng chung: nạp dữ liệu ô THẬT từ DB (API schema_v2) và trộn vào mock
-// CELLS — giữ geometry sơ đồ, thay số liệu nghiệp vụ bằng data Excel thật.
-//   - DCB02: merge vào ô mock đã có geometry.
-//   - DCB09: chưa có ô mock → dựng feature grid mới từ data DB.
-// Dùng bởi cả MapScreen (bản đồ) và CellListScreen (Quản lý theo ô) để 2 màn
-// hiển thị CÙNG nguồn data thật. Backend tắt → trả nguyên mock (app vẫn chạy).
+// Hook dùng chung: nạp ô THẬT của 1 DỰ ÁN từ DB (API /api/cells?project=),
+// dựng grid sơ đồ (mỗi lô 1 dải y). KHÔNG còn trộn mock — chỉ ô thật của dự án.
+// Dùng bởi MapScreen (bản đồ), CellListScreen, LotListScreen để cùng nguồn data.
+// Dự án rỗng / backend lỗi → mảng rỗng (bản đồ + màn ô trống).
 import { useEffect, useState } from 'react';
-import { CELLS } from '../data/cells';
 import { getCells } from '../services/cellsApi';
 
 // Chuẩn hoá mã ô để khớp DB ('DCB02-01') với mock ('DCB02-1'):
@@ -40,7 +37,7 @@ function buildGridCell(api, idx, lotCode, subdivisionId, gy) {
       cellCode: api.cellCode,
       lotCode,
       subdivisionId,
-      zone: api.zone ?? 'khu-b', // phân khu từ DB
+      zone: api.zone ?? null, // phân khu THẬT từ DB (null nếu chưa gán)
       centroid: [cx, cy],
       area: api.area ?? 0,
       planningType: api.planningType ?? 'Đất ở chia lô',
@@ -72,57 +69,61 @@ function buildGridCell(api, idx, lotCode, subdivisionId, gy) {
   };
 }
 
+// Dải y giữa các lô (mỗi lô 1 dải riêng để grid không chồng theo y).
+const GY_STEP = 400;
+
 /**
- * Trả về mảng cells (mock) đã được trộn data thật từ DB (DCB02 + DCB09).
- * @param {Array} initial mock cells (mặc định CELLS)
- * @returns {[Array, Function]} [cells, setCells]
+ * Trả về mảng cells THẬT của 1 DỰ ÁN (từ DB), dựng grid theo lô.
+ *   - Gọi 1 lần GET /api/cells?project=<projectId> → mọi ô của dự án.
+ *   - Group theo lotCode → mỗi lô 1 dải y → dựng grid đều.
+ *   - Dự án rỗng / chưa có data → [] (bản đồ + màn ô trống).
+ * @param {string} projectId mã dự án ('DA-001'); rỗng → không fetch.
+ * @param {Array} initial giá trị khởi tạo (mặc định []; truyền [] để khỏi nháy mock).
+ * @returns {[Array, Function, boolean]} [cells, setCells, ready]
  */
-export function useDbCells(initial = CELLS) {
+export function useDbCells(projectId, initial = []) {
   const [cells, setCells] = useState(initial);
-  // ready=false cho tới khi lần fetch đầu hoàn tất (kể cả khi backend tắt → vẫn
-  // bật true để UI thôi hiện skeleton, hiển thị data tĩnh). Tránh "nhấp nháy
-  // xám": mini-map chờ ready mới tô màu trạng thái.
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    // DCB02, DCB05, DCB09: dựng grid lưới mới từ DB (mỗi lô 1 dải y riêng).
-    // Không còn merge vào mock — DCB02 giờ là grid đều như DCB09.
-    Promise.all([
-      getCells('DCB02'),
-      getCells('DCB05'),
-      getCells('DCB09'),
-    ]).then(([dcb02, dcb05, dcb09]) => {
-      if (cancelled) return;
-      const dcb02Cells = dcb02.map((c, i) =>
-        buildGridCell(c, i, 'DCB02', 'dcb02', 80)
-      );
-      const dcb05Cells = dcb05.map((c, i) =>
-        buildGridCell(c, i, 'DCB05', 'dcb05', 400)
-      );
-      const dcb09Cells = dcb09.map((c, i) =>
-        buildGridCell(c, i, 'DCB09', 'dcb09', 640)
-      );
-      setCells((prev) => {
-        // Bỏ ô mock DCB02/DCB05 (nếu có) rồi thay bằng bản dựng từ DB.
-        const kept = prev.filter(
-          (f) =>
-            f.properties.lotCode !== 'DCB02' &&
-            f.properties.lotCode !== 'DCB05'
-        );
-        const hasDcb09 = kept.some((f) => f.properties.lotCode === 'DCB09');
-        const base = [...kept, ...dcb02Cells, ...dcb05Cells];
-        return hasDcb09 ? base : [...base, ...dcb09Cells];
-      });
+    if (!projectId) {
+      setCells([]);
       setReady(true);
-    })
-    .catch(() => {
-      if (!cancelled) setReady(true); // backend lỗi → vẫn bỏ skeleton, dùng data tĩnh
-    });
+      return undefined;
+    }
+    let cancelled = false;
+    setReady(false);
+    getCells(undefined, projectId)
+      .then((all) => {
+        if (cancelled) return;
+        // Group ô theo mã lô.
+        const byLot = new Map();
+        for (const c of all) {
+          if (!byLot.has(c.lotCode)) byLot.set(c.lotCode, []);
+          byLot.get(c.lotCode).push(c);
+        }
+        const lotCodes = [...byLot.keys()].sort();
+        const feats = [];
+        lotCodes.forEach((lotCode, li) => {
+          const gy = 80 + li * GY_STEP; // mỗi lô 1 dải y
+          const subId = lotCode.toLowerCase();
+          byLot
+            .get(lotCode)
+            .forEach((c, i) => feats.push(buildGridCell(c, i, lotCode, subId, gy)));
+        });
+        setCells(feats); // dự án rỗng → feats = [] → trống
+        setReady(true);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCells([]);
+          setReady(true);
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [projectId]);
 
   return [cells, setCells, ready];
 }

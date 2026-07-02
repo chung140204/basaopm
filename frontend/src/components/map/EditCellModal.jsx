@@ -3,6 +3,7 @@ import { X, Info, Upload, FileText } from 'lucide-react';
 import { getLayer } from '../../lib/layers';
 import { SUBDIVISIONS } from '../../data/cells';
 import { formatInteger } from '../../utils/format';
+import { useAuth } from '../../auth/AuthContext';
 
 const subName = (id) => SUBDIVISIONS.find((s) => s.id === id)?.name ?? id;
 
@@ -16,6 +17,7 @@ const INTERNAL_LEGAL_OPTIONS = [
 ];
 
 export default function EditCellModal({ feature, onClose, onSave, onDirtyClose }) {
+  const { can } = useAuth();
   const p = feature.properties;
   const [value, setValue] = useState(String(p.value ?? ''));
   const [businessStatus, setBusinessStatus] = useState(p.businessStatus);
@@ -233,14 +235,16 @@ export default function EditCellModal({ feature, onClose, onSave, onDirtyClose }
           >
             Hủy
           </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!canSave}
-            className="rounded-md bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Lưu thay đổi
-          </button>
+          {can('cell.edit') && (
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!canSave}
+              className="rounded-md bg-accent-600 px-4 py-2 text-sm font-medium text-white hover:bg-accent-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Lưu thay đổi
+            </button>
+          )}
         </div>
       </div>
     </div>

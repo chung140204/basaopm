@@ -1,7 +1,7 @@
 // Lô (land lots) are derived from CELLS by grouping on `lotCode`.
 // A lot = a list of contiguous cells. Its shape is the union of its cells'
 // geometries; its total area is the sum of cell areas.
-import { CELLS, SUBDIVISIONS, zoneOfLot, zoneName } from './cells';
+import { SUBDIVISIONS, zoneName } from './cells';
 
 // Bounding box over a set of cell features (viewBox space, y down).
 function bboxOf(cells) {
@@ -31,7 +31,7 @@ function areaByField(cells, field) {
 }
 
 // Build the derived lot list once at module load.
-export function buildLots(cells = CELLS) {
+export function buildLots(cells = []) {
   const byCode = new Map();
   for (const c of cells) {
     const code = c.properties.lotCode;
@@ -48,7 +48,8 @@ export function buildLots(cells = CELLS) {
       return ay - by || ax - bx;
     });
     const subdivisionId = cells[0].properties.subdivisionId;
-    const zoneId = zoneOfLot(code);
+    // Zone THẬT từ DB (cell.properties.zone). Lô chưa gán → null.
+    const zoneId = cells[0].properties.zone ?? null;
     const totalArea = cells.reduce((s, c) => s + (c.properties.area ?? 0), 0);
     lots.push({
       id: `lot-${code}`,
@@ -79,5 +80,3 @@ export function buildLots(cells = CELLS) {
   );
   return lots;
 }
-
-export const LOTS = buildLots();

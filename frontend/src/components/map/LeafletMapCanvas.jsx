@@ -71,6 +71,7 @@ function latLngToLeaflet(path) {
 }
 
 export default function LeafletMapCanvas({
+  projectId = null, // dự án đang mở → lọc cells-geojson tô màu theo dự án
   features = [],
   colorResolver,
   filterPredicate = () => true,
@@ -85,7 +86,8 @@ export default function LeafletMapCanvas({
   loThuaLayerId = LOTHUA_DEFAULT_LAYER, // layer lô thửa, mặc định 'truonglinh-lo'
   ranhThuaLayerId = null, // layer ranh thửa đang active (để query đúng layer)
   ranhThuaStatusLayer = 'business', // lớp trạng thái tô màu: business/legal/payment
-  ranhThuaFilter = null, // (feature)=>bool: ẩn/hiện thửa theo bộ lọc; null = hiện hết
+  ranhThuaFilter = null, // (feature)=>bool: thửa CÓ KHỚP bộ lọc không; null = khớp hết
+  ranhThuaHideUnmatched = false, // true: ẩn hẳn thửa không khớp; false: chỉ làm mờ
   showRanhThuaSubdivisions = false, // vẽ ranh phân khu A/B của ranh thửa
   showLo = false, // vẽ ranh lô (hình bao cụm thửa) + cho click
   selectedLoId = null, // id lô đang chọn → tô viền đậm để biết đang click lô nào
@@ -317,7 +319,7 @@ export default function LeafletMapCanvas({
       // thái mặc định), KHÔNG dùng data tĩnh nữa.
       Promise.all([
         getRanhThuaGeoJSON(best.id),
-        getCellsGeoJSON(), // mọi ô đã map geom (DCB02 + DCB05 + DCB09)
+        getCellsGeoJSON(undefined, projectId), // chỉ ô của dự án đang mở
       ]).then(([geojson, cellsFC]) => {
         if (cancelled) return;
         ranhThuaDataRef.current = applyDbOverlay(geojson, cellsFC);
@@ -327,7 +329,7 @@ export default function LeafletMapCanvas({
     return () => {
       cancelled = true;
     };
-  }, [ready, showRanhThua, ranhThuaLayerId]);
+  }, [ready, showRanhThua, ranhThuaLayerId, projectId]);
 
   // 3g) Lô thửa tile overlay (XYZ). Bật/tắt riêng bằng prop showLoThua.
   //     Dùng dạng per-layer /lo-thua-tiles/{layer}/{z}/{x}/{y}.png (merged lỗi 500).
@@ -383,10 +385,14 @@ export default function LeafletMapCanvas({
 
     const vec = L.geoJSON(data, {
       interactive: false, // click do map.on('click') xử lý
-      filter: (f) => (ranhThuaFilter ? ranhThuaFilter(f) : true),
+      // Chỉ ẩn HẲN khi bật "ẩn hẳn ô không khớp"; mặc định vẽ hết rồi làm mờ.
+      filter: (f) =>
+        ranhThuaHideUnmatched && ranhThuaFilter ? ranhThuaFilter(f) : true,
       style: (f) => {
         const value = statusValue(f, layerDef.field);
         const st = layerDef.statuses.find((s) => s.value === value);
+        // Thửa KHÔNG khớp bộ lọc (mà không ẩn hẳn) → làm mờ để ô khớp nổi bật.
+        const unmatched = ranhThuaFilter ? !ranhThuaFilter(f) : false;
         // Thửa "tạm thời" (chưa có meta thật) → viền nét đứt màu amber,
         // nền nhạt hơn, để phân biệt với thửa đã có số liệu thật.
         const provisional = isProvisional(f, layerDef.field);
@@ -396,23 +402,30 @@ export default function LeafletMapCanvas({
             weight: 1.5,
             dashArray: '5 4',
             fillColor: st?.fill || '#CBD5E1',
-            fillOpacity: 0.2,
-            opacity: 0.95,
+            fillOpacity: unmatched ? 0.04 : 0.2,
+            opacity: unmatched ? 0.2 : 0.95,
           };
         }
         return {
           color: st?.stroke || '#1D4ED8',
           weight: 1,
           fillColor: st?.fill || '#93C5FD',
-          fillOpacity: 0.45,
-          opacity: 0.9,
+          fillOpacity: unmatched ? 0.08 : 0.45,
+          opacity: unmatched ? 0.2 : 0.9,
         };
       },
     });
     vec.addTo(map);
     ranhThuaVecRef.current = vec;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, showRanhThua, ranhThuaDataVer, ranhThuaStatusLayer, ranhThuaFilter]);
+  }, [
+    ready,
+    showRanhThua,
+    ranhThuaDataVer,
+    ranhThuaStatusLayer,
+    ranhThuaFilter,
+    ranhThuaHideUnmatched,
+  ]);
 
   // 3e) Ranh phân khu A/B của ranh thửa (cấu hình cứng, chỉ hiển thị).
   useEffect(() => {
@@ -486,8 +499,13 @@ export default function LeafletMapCanvas({
         style: LO_STYLE_BASE,
         onEachFeature: (f, lyr) => {
           loLayersRef.current.set(f.id, lyr); // nhớ layer theo id để đổi style sau
+          // Nhãn lô: ưu tiên mã lô chuẩn (meta.loCode, VD "DCA15"); lô chưa gán
+          // mã → fallback "Lô #<id>".
+          const loLabel = f.properties.meta?.loCode
+            ? `Lô ${f.properties.meta.loCode}`
+            : `Lô #${f.id}`;
           lyr.bindTooltip(
-            `Lô #${f.id} · ${f.properties.cellCount} ô · ${Math.round(
+            `${loLabel} · ${f.properties.cellCount} ô · ${Math.round(
               f.properties.areaTotal
             ).toLocaleString('vi-VN')} m²`,
             { sticky: true }

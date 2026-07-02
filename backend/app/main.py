@@ -16,7 +16,27 @@ from pydantic import BaseModel
 from .db import get_conn
 from . import auth as A
 
-app = FastAPI(title="Ranh Thua API", version="1.0.0")
+# Nhóm endpoint trên Swagger (/docs) — chia theo mục đích cho dễ phân biệt.
+TAGS_METADATA = [
+    {"name": "Xác thực", "description": "Đăng nhập, phiên hiện tại, bản đồ quyền (role/permission)."},
+    {"name": "Người dùng", "description": "Quản lý tài khoản + đổi role (chỉ superadmin)."},
+    {"name": "Dự án", "description": "Danh sách dự án user được xem (phân quyền theo dự án)."},
+    {"name": "Ô đất", "description": "Ô nghiệp vụ (schema_v2): danh sách, chi tiết, geojson tô màu, cập nhật. Lọc theo dự án/lô."},
+    {"name": "Ranh thửa", "description": "Lớp ranh thửa bản đồ: geojson, tra thửa theo điểm click, tìm kiếm, cập nhật meta."},
+    {"name": "Lô", "description": "Cụm thửa (lô): geojson, chi tiết, cập nhật meta."},
+    {"name": "Hệ thống", "description": "Kiểm tra sức khỏe dịch vụ."},
+]
+
+app = FastAPI(
+    title="BasaoPM API",
+    version="1.0.0",
+    description=(
+        "API quản lý bất động sản BasaoPM — xác thực, phân quyền theo dự án, "
+        "dữ liệu ô đất / lô / ranh thửa cho bản đồ. Endpoint được nhóm theo "
+        "mục đích ở các mục bên dưới."
+    ),
+    openapi_tags=TAGS_METADATA,
+)
 
 # CORS: cho phép frontend dev gọi (Vite chạy 5173; mở * cho tiện demo).
 # Phải cho phép cả PUT/OPTIONS để form "Cập nhật thông tin" (lưu meta lô/thửa)
@@ -34,7 +54,7 @@ class MetaUpdate(BaseModel):
     meta: dict
 
 
-@app.get("/health")
+@app.get("/health", tags=["Hệ thống"])
 def health():
     return {"ok": True}
 
@@ -51,7 +71,7 @@ class RoleUpdateIn(BaseModel):
     role: str
 
 
-@app.get("/api/auth/meta")
+@app.get("/api/auth/meta", tags=["Xác thực"])
 def auth_meta():
     """Danh sách role + quyền cho FE gating (không cần đăng nhập)."""
     return {
@@ -63,7 +83,7 @@ def auth_meta():
     }
 
 
-@app.post("/api/auth/login")
+@app.post("/api/auth/login", tags=["Xác thực"])
 def login(body: LoginIn):
     with get_conn() as conn, conn.cursor() as cur:
         row = A.get_user_by_email(cur, (body.email or "").strip())
@@ -74,13 +94,13 @@ def login(body: LoginIn):
     return {"token": token, "user": user}
 
 
-@app.get("/api/auth/me")
+@app.get("/api/auth/me", tags=["Xác thực"])
 def me(user: dict = Depends(A.current_user)):
     return {"user": user}
 
 
 # ---- Quản lý người dùng (chỉ superadmin có quyền 'user.manage') ----------
-@app.get("/api/users")
+@app.get("/api/users", tags=["Người dùng"])
 def list_users(user: dict = Depends(A.require_permission("user.manage"))):
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
@@ -91,7 +111,7 @@ def list_users(user: dict = Depends(A.require_permission("user.manage"))):
     return {"users": [A._row_to_user(r) for r in rows]}
 
 
-@app.put("/api/users/{user_id}/role")
+@app.put("/api/users/{user_id}/role", tags=["Người dùng"])
 def update_user_role(
     user_id: int,
     body: RoleUpdateIn,
@@ -110,7 +130,32 @@ def update_user_role(
     return {"ok": True}
 
 
-@app.get("/api/ranh-thua/layers")
+# ---- Dự án user được xem (gating tầng dự án) -----------------------------
+@app.get("/api/projects", tags=["Dự án"])
+def list_projects(user: dict = Depends(A.current_user)):
+    """Dự án (trong DB) user được phép xem. FE lọc danh sách hiển thị theo đây.
+    superadmin → mọi project; admin/viewer → project trong user_project."""
+    with get_conn() as conn, conn.cursor() as cur:
+        if user["role"] == "superadmin":
+            cur.execute(
+                "SELECT code, name FROM project WHERE is_active ORDER BY code"
+            )
+        else:
+            cur.execute(
+                "SELECT p.code, p.name FROM user_project up "
+                "JOIN project p ON p.code = up.project_code "
+                "WHERE up.user_id = %s AND p.is_active ORDER BY p.code",
+                (user["id"],),
+            )
+        rows = cur.fetchall()
+    return {
+        "projects": [{"id": r[0], "name": r[1]} for r in rows],
+        "projectIds": [r[0] for r in rows],
+        "isSuperadmin": user["role"] == "superadmin",
+    }
+
+
+@app.get("/api/ranh-thua/layers", tags=["Ranh thửa"])
 def list_layers():
     """Danh sách layer + center [lng,lat] để frontend bay tới."""
     sql = """
@@ -131,10 +176,16 @@ def list_layers():
     }
 
 
-@app.get("/api/ranh-thua/geojson")
+@app.get("/api/ranh-thua/geojson", tags=["Ranh thửa"])
 def geojson(layer: str | None = Query(default=None)):
-    """FeatureCollection toàn bộ thửa (geometry WGS84) để vẽ polyline mọi ô."""
-    where = "WHERE layer_id = %s" if layer else ""
+    """FeatureCollection toàn bộ thửa (geometry WGS84) để vẽ polyline mọi ô.
+
+    Trạng thái tô màu (business/payment/collateral/book) GỘP từ bảng `cell`
+    (nguồn sự thật) vào meta khi thửa đã kích hoạt — vì meta của thửa đã dọn,
+    không còn *Status. Nhờ đó bản đồ tô đúng màu (không còn hiện "tạm thời"
+    nét đứt cho ô đã bán). Thửa chưa gắn cell → giữ meta gốc.
+    """
+    where = "WHERE rt.layer_id = %s" if layer else ""
     params = (layer,) if layer else ()
     sql = f"""
         SELECT json_build_object(
@@ -142,14 +193,25 @@ def geojson(layer: str | None = Query(default=None)):
             'features', COALESCE(json_agg(
                 json_build_object(
                     'type', 'Feature',
-                    'id', id,
-                    'properties', properties,
-                    'meta', meta,
-                    'geometry', ST_AsGeoJSON(geom)::json
+                    'id', rt.id,
+                    'properties', rt.properties,
+                    'meta', CASE
+                        WHEN c.id IS NULL THEN rt.meta
+                        ELSE rt.meta || jsonb_strip_nulls(jsonb_build_object(
+                            'businessStatus', c.business_status,
+                            'paymentStatus', c.payment_status,
+                            'collateralStatus', c.collateral_status,
+                            'bookStatus', c.book_status,
+                            'zone', s.zone
+                        ))
+                    END,
+                    'geometry', ST_AsGeoJSON(rt.geom)::json
                 )
             ), '[]'::json)
         )
-        FROM ranh_thua
+        FROM ranh_thua rt
+        LEFT JOIN cell c ON c.ranh_thua_id = rt.id AND c.deleted_at IS NULL
+        LEFT JOIN subdivision s ON s.id = c.subdivision_id
         {where}
     """
     with get_conn() as conn, conn.cursor() as cur:
@@ -158,22 +220,39 @@ def geojson(layer: str | None = Query(default=None)):
     return result
 
 
-@app.get("/api/ranh-thua/at")
+@app.get("/api/ranh-thua/at", tags=["Ranh thửa"])
 def at(
     lat: float = Query(...),
     lng: float = Query(...),
     layer: str | None = Query(default=None),
 ):
-    """Tìm thửa chứa điểm (lat,lng) — point-in-polygon bằng ST_Contains."""
-    cond = "ST_Contains(geom, ST_SetSRID(ST_Point(%s, %s), 4326))"
+    """Tìm thửa chứa điểm (lat,lng) — point-in-polygon bằng ST_Contains.
+
+    Trạng thái nghiệp vụ (business/payment/collateral/book, giá trị, chủ SH)
+    lấy từ bảng `cell` (NGUỒN SỰ THẬT) qua LEFT JOIN cell.ranh_thua_id=rt.id,
+    KHÔNG đọc từ rt.meta (đã dọn, chỉ còn key nhận diện). LEFT JOIN nên thửa
+    chưa gắn cell vẫn trả về (phần status = NULL → FE hiện trạng thái default).
+    """
+    cond = "ST_Contains(rt.geom, ST_SetSRID(ST_Point(%s, %s), 4326))"
     params = [lng, lat]  # ST_Point nhận (x=lng, y=lat)
     if layer:
-        cond += " AND layer_id = %s"
+        cond += " AND rt.layer_id = %s"
         params.append(layer)
+    # LƯU Ý: 2 layer (truonglinh-chialo / dccb-chialo) có thể CHỒNG LẤN địa lý
+    # → 1 điểm click rơi vào nhiều thửa. Ưu tiên thửa ĐÃ GẮN cell (có dữ liệu
+    # nghiệp vụ thật) lên đầu; nếu không FE sẽ nhận nhầm thửa trống.
     sql = f"""
-        SELECT id, layer_id, properties, meta, ST_AsGeoJSON(geom)::json
-        FROM ranh_thua
+        SELECT rt.id, rt.layer_id, rt.properties, rt.meta,
+               ST_AsGeoJSON(rt.geom)::json,
+               c.business_status, c.payment_status, c.collateral_status,
+               c.book_status, c.value,
+               (SELECT string_agg(co.owner_name, ', ' ORDER BY co.ordinal, co.id)
+                FROM cell_owner co WHERE co.cell_id = c.id) AS owner_name,
+               c.cell_code
+        FROM ranh_thua rt
+        LEFT JOIN cell c ON c.ranh_thua_id = rt.id AND c.deleted_at IS NULL
         WHERE {cond}
+        ORDER BY (c.id IS NOT NULL) DESC, rt.id
         LIMIT 1
     """
     with get_conn() as conn, conn.cursor() as cur:
@@ -183,6 +262,16 @@ def at(
     if not row:
         return {"found": False}
 
+    # Gộp trạng thái thật từ cell vào meta (giữ shape FE đang đọc: meta.[field]).
+    # Chỉ set field không NULL để thửa chưa có cell không bị ghi đè bằng None.
+    meta = dict(row[3] or {})
+    cell_status = {
+        "businessStatus": row[5], "paymentStatus": row[6],
+        "collateralStatus": row[7], "bookStatus": row[8],
+        "value": row[9], "owner": row[10], "cellCode": row[11],
+    }
+    meta.update({k: v for k, v in cell_status.items() if v is not None})
+
     return {
         "found": True,
         "layer": row[1],
@@ -190,13 +279,13 @@ def at(
             "type": "Feature",
             "id": row[0],
             "properties": row[2],
-            "meta": row[3],  # dữ liệu quản lý nghiệp vụ
+            "meta": meta,  # nhận diện (rt.meta) + trạng thái thật (cell)
             "geometry": row[4],
         },
     }
 
 
-@app.get("/api/ranh-thua/search")
+@app.get("/api/ranh-thua/search", tags=["Ranh thửa"])
 def search(q: str = Query(..., min_length=1), limit: int = Query(default=10)):
     """Tìm thửa theo số thửa (properties.So_thua), mã ô (meta.cellCode)
     hoặc mã lô (meta.lotCode).
@@ -207,40 +296,55 @@ def search(q: str = Query(..., min_length=1), limit: int = Query(default=10)):
     # Khớp mã lô bỏ qua dấu chấm: gõ "DCB05" hay "DC.B05" đều ra (lotCode
     # lưu dạng "DC.B05" nhưng cellCode dạng "DCB05-..").
     pattern_nodot = f"%{q.strip().replace('.', '')}%"
+    # Trạng thái lấy từ cell (nguồn sự thật) qua LEFT JOIN; rt.meta chỉ còn key
+    # nhận diện (cellCode/lotCode) — vẫn dùng để lọc tìm kiếm như cũ.
     sql = """
-        SELECT id, layer_id, properties, meta,
-               ST_AsGeoJSON(geom)::json,
-               ST_XMin(geom), ST_YMin(geom), ST_XMax(geom), ST_YMax(geom)
-        FROM ranh_thua
-        WHERE (properties->>'So_thua')            ILIKE %s
-           OR (meta->>'cellCode')                 ILIKE %s
-           OR (meta->>'lotCode')                  ILIKE %s
-           OR REPLACE(meta->>'lotCode', '.', '')  ILIKE %s
-        ORDER BY id
+        SELECT rt.id, rt.layer_id, rt.properties, rt.meta,
+               ST_AsGeoJSON(rt.geom)::json,
+               ST_XMin(rt.geom), ST_YMin(rt.geom), ST_XMax(rt.geom), ST_YMax(rt.geom),
+               c.business_status, c.payment_status, c.collateral_status,
+               c.book_status, c.value,
+               (SELECT string_agg(co.owner_name, ', ' ORDER BY co.ordinal, co.id)
+                FROM cell_owner co WHERE co.cell_id = c.id) AS owner_name,
+               c.cell_code
+        FROM ranh_thua rt
+        LEFT JOIN cell c ON c.ranh_thua_id = rt.id AND c.deleted_at IS NULL
+        WHERE (rt.properties->>'So_thua')            ILIKE %s
+           OR (rt.meta->>'cellCode')                 ILIKE %s
+           OR (rt.meta->>'lotCode')                  ILIKE %s
+           OR REPLACE(rt.meta->>'lotCode', '.', '')  ILIKE %s
+        ORDER BY rt.id
         LIMIT %s
     """
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(sql, (pattern, pattern, pattern, pattern_nodot, limit))
         rows = cur.fetchall()
 
-    return {
-        "results": [
-            {
-                "id": r[0],
-                "layer": r[1],
-                "properties": r[2],
-                "meta": r[3],
-                "geometry": r[4],
-                "bbox": [r[5], r[6], r[7], r[8]],  # [minLng,minLat,maxLng,maxLat]
-            }
-            for r in rows
-        ]
-    }
+    results = []
+    for r in rows:
+        # Gộp trạng thái thật từ cell vào meta (giữ shape FE: meta.[field]).
+        meta = dict(r[3] or {})
+        cell_status = {
+            "businessStatus": r[9], "paymentStatus": r[10],
+            "collateralStatus": r[11], "bookStatus": r[12],
+            "value": r[13], "owner": r[14], "cellCode": r[15],
+        }
+        meta.update({k: v for k, v in cell_status.items() if v is not None})
+        results.append({
+            "id": r[0],
+            "layer": r[1],
+            "properties": r[2],
+            "meta": meta,
+            "geometry": r[4],
+            "bbox": [r[5], r[6], r[7], r[8]],  # [minLng,minLat,maxLng,maxLat]
+        })
+
+    return {"results": results}
 
 
 # ---------------------------------------------------------------- LÔ (cụm thửa)
 
-@app.get("/api/lo/geojson")
+@app.get("/api/lo/geojson", tags=["Lô"])
 def lo_geojson(layer: str | None = Query(default=None)):
     """FeatureCollection hình bao tất cả lô (vẽ ranh lô + diện tích/ô con)."""
     where = "WHERE layer_id = %s" if layer else ""
@@ -268,14 +372,27 @@ def lo_geojson(layer: str | None = Query(default=None)):
     return result
 
 
-@app.get("/api/lo/{lo_id}")
+@app.get("/api/lo/{lo_id}", tags=["Lô"])
 def lo_detail(lo_id: int):
-    """Chi tiết 1 lô: thông tin tổng + danh sách ô con (thửa) thuộc lô."""
+    """Chi tiết 1 lô: thông tin tổng + danh sách ô con (thửa) thuộc lô.
+
+    Zone (khu) + dự án lấy từ bảng subdivision (nguồn chuẩn hoá) — nối qua
+    lot_code (= lo.meta->>'loCode') và cùng layer. LEFT JOIN nên lô chưa gán
+    subdivision vẫn trả về (zone/project = null → FE hiểu là "chưa gán").
+    """
     with get_conn() as conn, conn.cursor() as cur:
         cur.execute(
-            """SELECT id, layer_id, cell_count, round(area_total::numeric,1),
-                      meta, ST_AsGeoJSON(geom)::json
-               FROM lo WHERE id = %s""",
+            """SELECT l.id, l.layer_id, l.cell_count,
+                      round(l.area_total::numeric, 1), l.meta,
+                      ST_AsGeoJSON(l.geom)::json,
+                      s.zone, s.project_code, p.name
+               FROM lo l
+               LEFT JOIN subdivision s
+                      ON s.lot_code = l.meta->>'loCode'
+                     AND s.lo_layer_id = l.layer_id
+                     AND s.deleted_at IS NULL
+               LEFT JOIN project p ON p.code = s.project_code
+               WHERE l.id = %s""",
             (lo_id,),
         )
         lo = cur.fetchone()
@@ -296,6 +413,9 @@ def lo_detail(lo_id: int):
         "areaTotal": float(lo[3]),
         "meta": lo[4],
         "geometry": lo[5],
+        "zone": lo[6],
+        "projectCode": lo[7],
+        "projectName": lo[8],
         "cells": [
             {"id": c[0], "properties": c[1], "meta": c[2], "area": float(c[3])}
             for c in cells
@@ -303,8 +423,12 @@ def lo_detail(lo_id: int):
     }
 
 
-@app.put("/api/lo/{lo_id}/meta")
-def update_lo_meta(lo_id: int, body: MetaUpdate):
+@app.put("/api/lo/{lo_id}/meta", tags=["Lô"])
+def update_lo_meta(
+    lo_id: int,
+    body: MetaUpdate,
+    user: dict = Depends(A.require_permission("lot.edit")),
+):
     """Sửa mã lô / mô tả / ghi chú quản lý của 1 lô."""
     sql = "UPDATE lo SET meta = %s WHERE id = %s RETURNING id"
     with get_conn() as conn, conn.cursor() as cur:
@@ -316,8 +440,12 @@ def update_lo_meta(lo_id: int, body: MetaUpdate):
     return {"ok": True, "id": lo_id, "meta": body.meta}
 
 
-@app.put("/api/ranh-thua/{plot_id}/meta")
-def update_meta(plot_id: int, body: MetaUpdate):
+@app.put("/api/ranh-thua/{plot_id}/meta", tags=["Ranh thửa"])
+def update_meta(
+    plot_id: int,
+    body: MetaUpdate,
+    user: dict = Depends(A.require_permission("cell.edit")),
+):
     """Cập nhật dữ liệu quản lý (giá, trạng thái, pháp lý...) cho 1 thửa."""
     sql = "UPDATE ranh_thua SET meta = %s WHERE id = %s RETURNING id"
     with get_conn() as conn, conn.cursor() as cur:
@@ -379,7 +507,8 @@ def _cell_contract(cur, cell_id: int) -> dict | None:
 def _cell_mortgage(cur, cell_id: int, subdivision_id: int) -> dict | None:
     # Ưu tiên thế chấp override cấp ô; nếu không có → kế thừa cấp lô.
     cur.execute(
-        """SELECT state, lender_name, borrower_name, loan_value, note, purpose
+        """SELECT state, lender_name, borrower_name, loan_value, note, purpose,
+                  holder_name
            FROM mortgage
            WHERE deleted_at IS NULL AND (cell_id=%s OR subdivision_id=%s)
            ORDER BY (cell_id IS NOT NULL) DESC LIMIT 1""",
@@ -390,7 +519,20 @@ def _cell_mortgage(cur, cell_id: int, subdivision_id: int) -> dict | None:
         return None
     return {"status": r[0], "lender": r[1], "borrower": r[2],
             "loanValue": float(r[3]) if r[3] is not None else None,
-            "note": r[4], "purpose": r[5]}
+            "note": r[4], "purpose": r[5], "holder": r[6]}
+
+
+def _cell_owners(cur, cell_id: int) -> list:
+    """Danh sách chủ sở hữu của 1 ô (bảng cell_owner) — 1 ô có thể NHIỀU chủ.
+    Trả theo ordinal (thứ tự '1.A 2.B' như Excel)."""
+    cur.execute(
+        """SELECT owner_name, ordinal, note FROM cell_owner
+           WHERE cell_id = %s ORDER BY ordinal, id""",
+        (cell_id,),
+    )
+    return [
+        {"name": o[0], "ordinal": o[1], "note": o[2]} for o in cur.fetchall()
+    ]
 
 
 def _row_to_cell(r: tuple) -> dict:
@@ -430,11 +572,17 @@ def _row_to_cell(r: tuple) -> dict:
     }
 
 
-_CELL_COLS = """
+# owner: gộp tên chủ từ bảng cell_owner (1 ô nhiều chủ → "A, B") thay cho
+# cột owner_name đã bỏ. Danh sách chi tiết trả riêng qua field "owners".
+_OWNER_AGG = (
+    "(SELECT string_agg(co.owner_name, ', ' ORDER BY co.ordinal, co.id) "
+    "FROM cell_owner co WHERE co.cell_id = c.id)"
+)
+_CELL_COLS = f"""
     c.id, c.cell_code, s.lot_code, c.subdivision_id, c.cell_no,
     (c.ranh_thua_id IS NOT NULL) AS has_geom,
     ST_X(c.centroid), ST_Y(c.centroid),
-    c.owner_name, c.address, c.area, c.planning_type,
+    {_OWNER_AGG}, c.address, c.area, c.planning_type,
     c.business_status, c.book_status, c.book_no, c.construction_status,
     c.build_density, c.build_floor_min, c.build_floor_max,
     c.value, c.paid_value, c.remaining_value, c.payment_status,
@@ -442,12 +590,19 @@ _CELL_COLS = """
 """
 
 
-@app.get("/api/cells")
-def list_cells(lot: str | None = Query(default=None)):
-    """Danh sách ô nghiệp vụ (field phẳng). Lọc theo mã lô (lot=DCB02)."""
+@app.get("/api/cells", tags=["Ô đất"])
+def list_cells(
+    lot: str | None = Query(default=None),
+    project: str | None = Query(default=None),
+):
+    """Danh sách ô nghiệp vụ (field phẳng). Lọc theo dự án (project=DA-001)
+    hoặc mã lô (lot=DCB02). Ưu tiên project nếu có."""
     where = "WHERE c.deleted_at IS NULL"
     params: list = []
-    if lot:
+    if project:
+        where += " AND s.project_code = %s"
+        params.append(project)
+    elif lot:
         where += " AND s.lot_code = %s"
         params.append(lot)
     sql = f"""SELECT {_CELL_COLS}
@@ -459,7 +614,7 @@ def list_cells(lot: str | None = Query(default=None)):
     return {"cells": [_row_to_cell(r) for r in rows]}
 
 
-@app.get("/api/cells/{cell_code}")
+@app.get("/api/cells/{cell_code}", tags=["Ô đất"])
 def cell_detail(cell_code: str):
     """Chi tiết 1 ô: field phẳng + contract + payments + mortgage + legal timeline."""
     sql = f"""SELECT {_CELL_COLS}
@@ -472,6 +627,7 @@ def cell_detail(cell_code: str):
             raise HTTPException(status_code=404, detail="Không tìm thấy ô")
         cell = _row_to_cell(row)
         cid = cell["id"]
+        cell["owners"] = _cell_owners(cur, cid)  # danh sách chủ (1 ô nhiều chủ)
         cell["contract"] = _cell_contract(cur, cid)
         cell["payments"] = _cell_payments(cur, cid)
         cell["mortgage"] = _cell_mortgage(cur, cid, cell["subdivisionId"])
@@ -492,12 +648,19 @@ def cell_detail(cell_code: str):
     return cell
 
 
-@app.get("/api/cells-geojson")
-def cells_geojson(lot: str | None = Query(default=None)):
-    """GeoJSON các ô ĐÃ MAP GEOM (DCB02) — vẽ layer tô màu theo trạng thái."""
+@app.get("/api/cells-geojson", tags=["Ô đất"])
+def cells_geojson(
+    lot: str | None = Query(default=None),
+    project: str | None = Query(default=None),
+):
+    """GeoJSON các ô ĐÃ MAP GEOM — vẽ layer tô màu theo trạng thái.
+    Lọc theo dự án (project) hoặc mã lô (lot). Ưu tiên project."""
     where = "WHERE c.deleted_at IS NULL AND c.ranh_thua_id IS NOT NULL"
     params: list = []
-    if lot:
+    if project:
+        where += " AND s.project_code = %s"
+        params.append(project)
+    elif lot:
         where += " AND s.lot_code = %s"
         params.append(lot)
     sql = f"""
@@ -517,6 +680,7 @@ def cells_geojson(lot: str | None = Query(default=None)):
                     'businessStatus', c.business_status,
                     'paymentStatus', c.payment_status,
                     'collateralStatus', c.collateral_status,
+                    'bookStatus', c.book_status,
                     'value', c.value
                 )
             )), '[]'::json)
@@ -532,8 +696,12 @@ def cells_geojson(lot: str | None = Query(default=None)):
     return result
 
 
-@app.put("/api/cells/{cell_code}")
-def update_cell(cell_code: str, body: CellUpdate):
+@app.put("/api/cells/{cell_code}", tags=["Ô đất"])
+def update_cell(
+    cell_code: str,
+    body: CellUpdate,
+    user: dict = Depends(A.require_permission("cell.edit")),
+):
     """Cập nhật field phẳng cho 1 ô (chỉ các field gửi lên, partial update)."""
     fields = body.model_dump(exclude_none=True)
     if not fields:

@@ -3,13 +3,16 @@ import { X, MapPin, Copy, Pencil, FileText, Check, Loader2 } from 'lucide-react'
 import { labelFor, getLayer } from '../../lib/layers';
 import { formatCurrency, formatDate } from '../../utils/format';
 import { saveRanhThuaMeta } from '../../services/planningApi';
+import { getCellDetail } from '../../services/cellsApi';
 import { mockStatusFor } from './ranhThuaStatus';
 import ResponsiveSidePanel from '../common/ResponsiveSidePanel';
+import { useAuth } from '../../auth/AuthContext';
 import {
   paymentProgress,
   paymentMethodLabel,
   mortgageStatusLabel,
 } from '../../utils/payment';
+import { labelTaxBearer } from '../../data/enumLabels';
 
 const TABS = [
   { key: 'identity', label: 'Định danh' },
@@ -126,6 +129,7 @@ function centroidOf(geometry) {
 }
 
 export default function RanhThuaPanel({ plot, onClose, onSaved, showToast }) {
+  const { can } = useAuth();
   const [tab, setTab] = useState('identity');
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({});
@@ -134,17 +138,9 @@ export default function RanhThuaPanel({ plot, onClose, onSaved, showToast }) {
   const props = plot?.properties || {};
   const clicked = plot?.clickedAt;
   const center = centroidOf(plot?.geometry);
-  // Diện tích: ƯU TIÊN số chuẩn từ Excel (meta.areaExcel) → Dien_tich shapefile
-  // (nếu >0) → cuối cùng tính từ geometry (cho ô chưa có trong Excel).
+  // Diện tích tính từ hình học (fallback cuối). displayArea (ưu tiên cell.area
+  // từ Excel) được tính bên dưới, SAU khi có `detail` từ /api/cells.
   const computedArea = useMemo(() => areaOf(plot?.geometry), [plot]);
-  const displayArea =
-    plot?.meta?.areaExcel != null
-      ? plot.meta.areaExcel
-      : props.Dien_tich > 0
-        ? props.Dien_tich
-        : computedArea != null && computedArea > 0
-          ? Math.round(computedArea * 10) / 10
-          : null;
   const plotId = plot?.id;
   const hasPlot = plotId != null;
   // Trạng thái hiển thị: ưu tiên meta thật người dùng đã nhập; trường nào trống
@@ -160,6 +156,60 @@ export default function RanhThuaPanel({ plot, onClose, onSaved, showToast }) {
       ...m, // meta thật ghi đè mock
     };
   }, [plot, plotId, hasPlot]);
+
+  // Chi tiết nghiệp vụ ĐẦY ĐỦ từ bảng cell (contract/payments/mortgage/pháp lý).
+  // Thửa đã "kích hoạt" thành ô kinh doanh → meta.cellCode có giá trị → kéo chi
+  // tiết thật từ /api/cells/{cellCode} (meta của thửa đã dọn, không còn các field
+  // này). Thửa chưa gắn cell → detail = null, panel dùng meta như cũ.
+  const cellCode = meta.cellCode;
+  const [detail, setDetail] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    setDetail(null);
+    if (!cellCode) return undefined;
+    getCellDetail(cellCode).then((d) => {
+      if (!cancelled) setDetail(d);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cellCode]);
+
+  // Diện tích hiển thị: ƯU TIÊN cell.area (số Excel chuẩn, nhất quán với màn
+  // "Quản lý theo ô") → meta.areaExcel (thửa chưa có cell) → đo từ geometry.
+  const displayArea =
+    detail?.area != null
+      ? detail.area
+      : plot?.meta?.areaExcel != null
+        ? plot.meta.areaExcel
+        : computedArea != null && computedArea > 0
+          ? Math.round(computedArea * 10) / 10
+          : null;
+
+  // `view` = dữ liệu HIỂN THỊ (chỉ đọc). Nếu có detail từ cell (ô đã kích hoạt),
+  // merge đè lên meta để tab Kinh doanh/Pháp lý/Thanh toán hiện đầy đủ hợp đồng,
+  // thanh toán, thế chấp... Khi KHÔNG có detail → view = meta (giữ hành vi cũ cho
+  // thửa chưa gắn cell). Không đụng `meta`/`draft` để phần Sửa vẫn ghi vào
+  // ranh_thua.meta như trước.
+  const view = useMemo(() => {
+    if (!detail) return meta;
+    return {
+      ...meta,
+      businessStatus: detail.businessStatus ?? meta.businessStatus,
+      paymentStatus: detail.paymentStatus ?? meta.paymentStatus,
+      collateralStatus: detail.collateralStatus ?? meta.collateralStatus,
+      bookStatus: detail.bookStatus ?? meta.bookStatus,
+      internalLegal: detail.internalLegal ?? meta.internalLegal,
+      value: detail.value ?? meta.value,
+      contractValue: detail.contract?.totalValue ?? detail.value ?? meta.contractValue,
+      paid: detail.paid ?? meta.paid,
+      remaining: detail.remaining ?? meta.remaining,
+      currentOwner: detail.owner ?? meta.currentOwner,
+      contract: detail.contract ?? meta.contract,
+      payments: detail.payments ?? meta.payments,
+      mortgage: detail.mortgage ?? meta.mortgage,
+    };
+  }, [detail, meta]);
 
   // Reset khi đổi thửa.
   useEffect(() => {
@@ -182,15 +232,16 @@ export default function RanhThuaPanel({ plot, onClose, onSaved, showToast }) {
     setSaving(false);
     if (ok) {
       setEditing(false);
-      showToast?.('Đã lưu thông tin thửa');
+      showToast?.('Đã lưu thông tin ô');
       onSaved?.(plotId, draft); // để MapScreen cập nhật plot hiện tại
     } else {
       showToast?.('Lưu thất bại — kiểm tra backend');
     }
   };
 
-  // Giá trị hiển thị: ưu tiên draft khi đang sửa.
-  const m = editing ? draft : meta;
+  // Giá trị hiển thị: khi đang sửa → draft (ghi vào ranh_thua.meta); khi chỉ
+  // xem → view (đã merge chi tiết thật từ cell nếu ô đã kích hoạt).
+  const m = editing ? draft : view;
 
   return (
     <ResponsiveSidePanel
@@ -203,11 +254,8 @@ export default function RanhThuaPanel({ plot, onClose, onSaved, showToast }) {
           <MapPin className="h-4 w-4 text-accent-600" />
           <div>
             <h3 className="text-sm font-semibold text-ink-primary">
-              {m.cellCode || `Thửa ${props.So_thua ?? plotId ?? ''}`}
+              {m.cellCode || `Ô ${props.So_thua ?? plotId ?? ''}`}
             </h3>
-            <p className="text-xs text-ink-muted">
-              {hasPlot ? `Mã thửa #${plotId}` : 'Vị trí điểm click'}
-            </p>
           </div>
         </div>
         <button
@@ -246,7 +294,7 @@ export default function RanhThuaPanel({ plot, onClose, onSaved, showToast }) {
 
       {!hasPlot ? (
         <div className="flex-1 px-4 py-6 text-center text-sm text-ink-muted">
-          Vị trí này không nằm trong thửa nào.
+          Vị trí này không nằm trong ô nào.
         </div>
       ) : (
         <>
@@ -293,7 +341,7 @@ export default function RanhThuaPanel({ plot, onClose, onSaved, showToast }) {
                     <Row label="Mô tả">{m.description || '—'}</Row>
                   </>
                 )}
-                <Row label="Diện tích (đo)">{fmtArea(displayArea)}</Row>
+                <Row label="Diện tích">{fmtArea(displayArea)}</Row>
                 {/* Tạm ẩn Chiều dài / Chiều rộng theo yêu cầu. */}
                 {center && (
                   <Row label="Tọa độ tâm">
@@ -417,7 +465,8 @@ export default function RanhThuaPanel({ plot, onClose, onSaved, showToast }) {
             )}
           </div>
 
-          {/* Footer */}
+          {/* Footer — chỉ hiện với người có quyền sửa thửa */}
+          {can('cell.edit') && (
           <div className="border-t border-line p-3">
             {editing ? (
               <div className="flex gap-2">
@@ -450,10 +499,11 @@ export default function RanhThuaPanel({ plot, onClose, onSaved, showToast }) {
                 className="flex w-full items-center justify-center gap-2 rounded-md bg-accent-600 py-2 text-sm font-medium text-white hover:bg-accent-700"
               >
                 <Pencil className="h-4 w-4" />
-                Cập nhật thông tin thửa
+                Cập nhật thông tin ô
               </button>
             )}
           </div>
+          )}
         </>
       )}
     </ResponsiveSidePanel>
@@ -486,7 +536,9 @@ function PaymentView({ m }) {
         </Row>
         <Row label="Khách hàng">{c.customer || m.currentOwner || '—'}</Row>
         <Row label="Tổng giá trị HĐ">{totalDue ? formatCurrency(totalDue) : '—'}</Row>
-        <Row label="Bên chịu thuế">{c.taxBearer || '—'}</Row>
+        <Row label="Bên chịu thuế">
+          {c.taxBearer ? labelTaxBearer(c.taxBearer) : '—'}
+        </Row>
       </div>
 
       {/* 3) Lộ trình thanh toán */}
@@ -545,6 +597,8 @@ function PaymentView({ m }) {
         <Row label="Tình trạng">
           {mg.status ? mortgageStatusLabel(mg.status) : '—'}
         </Row>
+        {mg.holder && <Row label="Người đứng tên">{mg.holder}</Row>}
+        {mg.borrower && <Row label="Bên đứng tên vay">{mg.borrower}</Row>}
         <Row label="Tổ chức nhận TC">{mg.lender || '—'}</Row>
         <Row label="Giá trị khoản vay">
           {mg.loanValue != null ? formatCurrency(mg.loanValue) : '—'}

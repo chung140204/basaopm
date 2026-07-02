@@ -167,11 +167,14 @@ def main():
         lots = {}
         # zone: phân khu của lô (DCB02/DCB09 đều thuộc Khu B).
         ZONE_BY_LOT = {"DCB02": "khu-b", "DCB09": "khu-b"}
+        # project_code: lô thuộc dự án nào (để bản đồ lọc theo dự án).
+        PROJECT_BY_LOT = {"DCB02": "DA-001", "DCB09": "DA-001"}
         for code in ["DCB02", "DCB09"]:
             cur.execute(
-                "INSERT INTO subdivision (lot_code, name, zone, lo_layer_id) "
-                "VALUES (%s,%s,%s,%s) RETURNING id",
-                (code, f"Lô {code}", ZONE_BY_LOT.get(code), "truonglinh-chialo"),
+                "INSERT INTO subdivision (lot_code, name, zone, lo_layer_id, project_code) "
+                "VALUES (%s,%s,%s,%s,%s) RETURNING id",
+                (code, f"Lô {code}", ZONE_BY_LOT.get(code),
+                 "truonglinh-chialo", PROJECT_BY_LOT.get(code)),
             )
             lots[code] = cur.fetchone()[0]
 

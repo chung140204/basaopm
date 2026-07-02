@@ -27,14 +27,66 @@ export const LAYERS = [
   {
     id: 'legal',
     label: 'Pháp lý / tài sản bảo đảm',
-    field: 'collateralStatus',
+    field: 'bookStatus',
+    // Trạng thái CẤP SỔ (book_status). Màu chọn để KHÔNG trùng lớp 'business'
+    // (business dùng: #94A3B8 xám, #16A34A xanh lá, #D97706 cam). Nhóm theo mức
+    // độ hoàn thiện: chưa sổ → đỏ/hổ phách, đang xử lý → vàng, đã có sổ → tông
+    // xanh/tím theo palette thương hiệu (color.md).
     statuses: [
       {
-        value: 'none',
-        label: 'Không thế chấp',
+        value: 'no_book_ineligible',
+        label: 'Chưa cấp sổ - Không đủ điều kiện',
+        fill: '#DC2626',
+        stroke: '#B91C1C',
+      },
+      {
+        value: 'no_book_eligible',
+        label: 'Chưa cấp sổ - Đủ điều kiện',
+        fill: '#F59E0B',
+        stroke: '#D97706',
+      },
+      {
+        value: 'book_in_progress',
+        label: 'Đang làm thủ tục cấp sổ',
+        fill: '#CA8A04',
+        stroke: '#A16207',
+      },
+      {
+        value: 'book_held_investor',
+        label: 'Đã có sổ - Do CĐT cầm',
+        fill: '#7C3AED',
+        stroke: '#6D28D9',
+      },
+      {
+        value: 'book_transferred',
+        label: 'Đã có sổ - Chuyển giao cho chủ sở hữu',
+        fill: '#003AD6',
+        stroke: '#0030B0',
+      },
+      {
+        value: 'book_in_transaction',
+        label: 'Đã có sổ - Đang giao dịch tài chính / pháp lý',
         fill: '#0891B2',
         stroke: '#0E7490',
       },
+      {
+        value: 'book_split',
+        label: 'Đã có sổ - Đổi/Tách từ sổ cũ',
+        fill: '#000D6D',
+        stroke: '#000940',
+      },
+    ],
+  },
+  {
+    // Lớp thế chấp CŨ — không còn dùng để tô màu bản đồ (lớp 'legal' đã chuyển
+    // sang trạng thái cấp sổ), nhưng GIỮ để badge "Tài sản bảo đảm" trong panel
+    // chi tiết ô còn nhãn/màu đúng cho collateralStatus.
+    id: 'collateral',
+    label: 'Tài sản bảo đảm (thế chấp)',
+    field: 'collateralStatus',
+    hideOnMap: true,
+    statuses: [
+      { value: 'none', label: 'Không thế chấp', fill: '#0891B2', stroke: '#0E7490' },
       {
         value: 'mortgage_bank',
         label: 'Thế chấp vay ngân hàng',

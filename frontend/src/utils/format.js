@@ -1,6 +1,12 @@
 // Vietnamese number / date formatting helpers.
 
 const nfInteger = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 });
+// Diện tích m²: giữ tới 2 số thập phân THẬT, không thêm ".0" thừa cho số nguyên
+// (87.5 → "87,5"; 90 → "90"; 112.53 → "112,53"). Không làm tròn về nguyên.
+const nfM2 = new Intl.NumberFormat('vi-VN', {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+});
 const nfArea = new Intl.NumberFormat('vi-VN', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
@@ -47,10 +53,10 @@ export function formatMonthYear(value) {
   return `${month}/${year}`;
 }
 
-/** 191858 -> "191.858 m²" */
+/** 191858 -> "191.858 m²"; 87.5 -> "87,5 m²" (giữ số lẻ, không làm tròn) */
 export function formatM2(value) {
   if (value == null) return '—';
-  return `${nfInteger.format(value)} m²`;
+  return `${nfM2.format(value)} m²`;
 }
 
 /** 2350000000 -> "2.350.000.000 đ" */

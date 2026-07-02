@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Search, Grid3x3, Maximize2 } from 'lucide-react';
-import { LOTS, buildLots } from '../../data/lots';
-import { ZONES, CELLS } from '../../data/cells';
+import { buildLots } from '../../data/lots';
+import { ZONES } from '../../data/cells';
 import { useDbCells } from '../../hooks/useDbCells';
+import { saveCell } from '../../services/cellsApi';
 import { formatM2 } from '../../utils/format';
 import LotShape from './LotShape';
+import { Skeleton } from '../common/Skeleton';
 import LotDetailPanel from './LotDetailPanel';
 import EditLotModal from './EditLotModal';
 import AreaBreakdownBar from './AreaBreakdownBar';
@@ -46,19 +48,18 @@ function LotCard({ lot, active, onClick, ready }) {
         {ready ? (
           <AreaBreakdownBar layerId="business" data={lot.areaByBusiness} />
         ) : (
-          <div className="h-2.5 w-full animate-pulse rounded-full bg-surface-2" />
+          <Skeleton className="h-2.5 w-full rounded-full" />
         )}
       </div>
     </button>
   );
 }
 
-export default function LotListScreen({ showToast, onOpenCell }) {
-  // Cells trộn dữ liệu thật từ DB (qua API). Backend tắt → CELLS tĩnh.
-  // ready=false trong lúc chờ DB → mini-map hiện skeleton thay vì màu xám.
-  const [cells, , ready] = useDbCells(CELLS);
-  // Local copy of derived lots so edits persist within the session.
-  const [lots, setLots] = useState(LOTS);
+export default function LotListScreen({ showToast, onOpenCell, projectId }) {
+  // Ô THẬT của dự án đang mở (qua API). ready=false trong lúc chờ DB.
+  const [cells, setCells, ready] = useDbCells(projectId, []);
+  // Lô suy từ cells; dự án rỗng → [] (không lô).
+  const [lots, setLots] = useState([]);
 
   // Khi cells (DB) tải xong → dựng lại lots để grid lấy màu/diện tích từ DB.
   // Bao gồm cả DCB09 (32 ô dựng grid từ DB qua useDbCells) → hiện thành lô
@@ -105,6 +106,36 @@ export default function LotListScreen({ showToast, onOpenCell }) {
     showToast?.(`Đã cập nhật lô ${updated.lotCode}`);
   };
 
+  // Cập nhật hàng loạt 1 trạng thái cho nhiều ô con của 1 lô.
+  //  - Lưu THẬT xuống DB qua saveCell (PUT /api/cells/{code}) cho từng ô.
+  //  - Cập nhật state `cells` cho ô lưu thành công → useEffect tự dựng lại lots
+  //    (một nguồn sự thật; màu/diện tích theo trạng thái tự cập nhật).
+  const handleBulkUpdateCells = async (lot, cellCodes, { prop, apiKey, value }) => {
+    const codes = new Set(cellCodes);
+    const results = await Promise.all(
+      cellCodes.map((code) => saveCell(code, { [apiKey]: value }))
+    );
+    const okCount = results.filter(Boolean).length;
+
+    if (okCount > 0) {
+      setCells((prev) =>
+        prev.map((c) =>
+          codes.has(c.properties.cellCode)
+            ? { ...c, properties: { ...c.properties, [prop]: value } }
+            : c
+        )
+      );
+    }
+
+    if (okCount === cellCodes.length) {
+      showToast?.(`Đã cập nhật ${okCount} ô của lô ${lot.lotCode}`);
+    } else if (okCount > 0) {
+      showToast?.(`Cập nhật ${okCount}/${cellCodes.length} ô — một số ô lỗi`);
+    } else {
+      showToast?.('Cập nhật thất bại — kiểm tra backend/quyền');
+    }
+  };
+
   return (
     <div className="flex flex-1 overflow-hidden bg-app">
       <main className="flex min-w-0 flex-1 flex-col">
@@ -142,7 +173,18 @@ export default function LotListScreen({ showToast, onOpenCell }) {
 
         {/* Grouped cards */}
         <div className="flex-1 overflow-auto p-4 md:p-6">
-          {groups.length === 0 ? (
+          {!ready && lots.length === 0 ? (
+            /* Đang tải (chưa có lô nào) → lưới skeleton card thay vì text trống. */
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(248px,1fr))] gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-line bg-surface-1 p-4">
+                  <Skeleton className="mb-3 h-24 w-full rounded-lg" />
+                  <Skeleton className="mb-2 h-4 w-24" />
+                  <Skeleton className="h-2.5 w-full rounded-full" />
+                </div>
+              ))}
+            </div>
+          ) : groups.length === 0 ? (
             <p className="py-10 text-center text-ink-muted">Không có lô nào khớp bộ lọc.</p>
           ) : (
             <div className="space-y-8">
@@ -179,6 +221,7 @@ export default function LotListScreen({ showToast, onOpenCell }) {
           onClose={() => setSelectedId(null)}
           onEdit={(l) => setEditing(l)}
           onOpenCell={onOpenCell}
+          onBulkUpdateCells={handleBulkUpdateCells}
         />
       )}
 

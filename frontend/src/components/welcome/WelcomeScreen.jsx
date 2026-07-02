@@ -68,31 +68,38 @@ function IconButton({ icon: Icon, label, tone = 'default', onClick }) {
 }
 
 function CardActions({ project, onEdit, onHide, onRestore }) {
+  const { can } = useAuth();
   const isHidden = project.status === 'hidden';
   return (
     <div className="flex items-center gap-0.5">
-      {isHidden ? (
-        <IconButton
-          icon={RotateCw}
-          label="Khôi phục dự án"
-          tone="accent"
-          onClick={() => onRestore(project)}
-        />
-      ) : (
-        <>
-          <IconButton
-            icon={Pencil}
-            label="Sửa thông tin"
-            onClick={() => onEdit(project)}
-          />
-          <IconButton
-            icon={EyeOff}
-            label="Ẩn dự án"
-            tone="warning"
-            onClick={() => onHide(project)}
-          />
-        </>
-      )}
+      {isHidden
+        ? can('project.hide') && (
+            <IconButton
+              icon={RotateCw}
+              label="Khôi phục dự án"
+              tone="accent"
+              onClick={() => onRestore(project)}
+            />
+          )
+        : (
+          <>
+            {can('project.edit') && (
+              <IconButton
+                icon={Pencil}
+                label="Sửa thông tin"
+                onClick={() => onEdit(project)}
+              />
+            )}
+            {can('project.hide') && (
+              <IconButton
+                icon={EyeOff}
+                label="Ẩn dự án"
+                tone="warning"
+                onClick={() => onHide(project)}
+              />
+            )}
+          </>
+        )}
     </div>
   );
 }
@@ -266,7 +273,7 @@ export default function WelcomeScreen({
   onHideProject,
   onRestoreProject,
 }) {
-  const { logout } = useAuth();
+  const { logout, can } = useAuth();
   const [filter, setFilter] = useState('visible');
   const [showContactAdmin, setShowContactAdmin] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -399,14 +406,16 @@ export default function WelcomeScreen({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowContactAdmin(true)}
-            className="flex items-center gap-2 rounded-md bg-accent-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-accent-700"
-          >
-            <Plus className="h-4 w-4" />
-            Thêm dự án
-          </button>
+          {can('project.edit') && (
+            <button
+              type="button"
+              onClick={() => setShowContactAdmin(true)}
+              className="flex items-center gap-2 rounded-md bg-accent-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-accent-700"
+            >
+              <Plus className="h-4 w-4" />
+              Thêm dự án
+            </button>
+          )}
         </div>
 
         {/* List — horizontal rows */}

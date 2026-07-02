@@ -12,11 +12,13 @@ import {
   Trash2,
   Loader2,
 } from 'lucide-react';
-import { zoneOfLot, zoneName } from '../../data/cells';
+import { zoneName } from '../../data/cells';
 import { formatM2, formatDate, formatPercent } from '../../utils/format';
 import { getCellDetail } from '../../services/cellsApi';
+import { useAuth } from '../../auth/AuthContext';
 import { Card, Row, SectionTitle, val } from './cellDetailUi';
 import PaymentPanel from './PaymentPanel';
+import { Skeleton } from '../common/Skeleton';
 import {
   labelConstruction,
   labelPlanning,
@@ -48,6 +50,7 @@ function enrichWithDetail(base, d) {
   return {
     ...base,
     currentOwner: d.owner ?? base.currentOwner,
+    owners: d.owners ?? [], // danh sách chủ (1 ô nhiều chủ)
     address: d.address ?? base.address,
     ownershipContract: d.contract?.code ?? null,
     constructionStatus: d.constructionStatus
@@ -87,6 +90,8 @@ function enrichWithDetail(base, d) {
     mortgage: d.mortgage
       ? {
           lender: d.mortgage.lender,
+          holder: d.mortgage.holder, // người đứng tên (từ DB)
+          borrower: d.mortgage.borrower, // bên đứng tên vay (từ DB)
           status: d.mortgage.status,
           outstanding: d.mortgage.loanValue,
           note: d.mortgage.note,
@@ -177,6 +182,7 @@ function LegalHistory({ items }) {
 }
 
 export default function CellDetailScreen({ feature, defaultTab = 'legal', onBack }) {
+  const { can } = useAuth();
   const [tab, setTab] = useState(defaultTab);
   const base = feature.properties;
   // Chi tiết THẬT từ DB (contract/payments/mortgage/legal timeline).
@@ -250,17 +256,20 @@ export default function CellDetailScreen({ feature, defaultTab = 'legal', onBack
             Chi tiết ô {p.cellCode}
           </h2>
           <p className="text-xs text-ink-muted">
-            {p.lotCode} · {zoneName(zoneOfLot(p.lotCode))} · {formatM2(p.area)}
+            {p.zone ? `${zoneName(p.zone)} · ` : ''}
+            {p.lotCode} · {formatM2(p.area)}
           </p>
         </div>
 
-        <button
-          type="button"
-          className="ml-auto flex items-center gap-2 rounded-md bg-accent-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-accent-700"
-        >
-          <Pencil className="h-4 w-4" />
-          Cập nhật thông tin ô
-        </button>
+        {can('cell.edit') && (
+          <button
+            type="button"
+            className="ml-auto flex items-center gap-2 rounded-md bg-accent-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-accent-700"
+          >
+            <Pencil className="h-4 w-4" />
+            Cập nhật thông tin ô
+          </button>
+        )}
       </div>
 
       {/* Tabs */}
@@ -293,9 +302,11 @@ export default function CellDetailScreen({ feature, defaultTab = 'legal', onBack
       <div className="flex-1 overflow-y-auto p-4 md:p-6">
         <div className="mx-auto max-w-4xl">
           {status === 'loading' && (
-            <div className="mb-4 flex items-center gap-2 rounded-md border border-line bg-surface-2 px-4 py-2.5 text-sm text-ink-muted">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Đang tải dữ liệu từ máy chủ…
+            <div className="mb-4 space-y-2 rounded-md border border-line bg-surface-1 p-3">
+              {/* Skeleton dải mảnh — đang tải chi tiết từ máy chủ. */}
+              <Skeleton className="h-3.5 w-48" />
+              <Skeleton className="h-3.5 w-full" />
+              <Skeleton className="h-3.5 w-2/3" />
             </div>
           )}
           {status === 'failed' && (
@@ -319,13 +330,26 @@ export default function CellDetailScreen({ feature, defaultTab = 'legal', onBack
 
 // Tab "Pháp lý & hồ sơ"
 function LegalTab({ p, documents, onChangeDocuments }) {
+  const { can } = useAuth();
   return (
     <div className="grid gap-4 md:grid-cols-2">
       <Card>
         <SectionTitle>Thông tin định danh</SectionTitle>
         <Row label="Mã ô" locked>{p.cellCode}</Row>
         <Row label="Mã lô" locked>{p.lotCode}</Row>
-        <Row label="Chủ sở hữu">{val(p.currentOwner)}</Row>
+        <Row label={p.owners?.length > 1 ? 'Chủ sở hữu' : 'Chủ sở hữu'}>
+          {p.owners?.length > 1 ? (
+            <div className="flex flex-col items-end gap-0.5">
+              {p.owners.map((o, i) => (
+                <span key={i}>
+                  {p.owners.length > 1 ? `${i + 1}. ` : ''}{o.name}
+                </span>
+              ))}
+            </div>
+          ) : (
+            val(p.currentOwner)
+          )}
+        </Row>
         <Row label="Số hợp đồng">{val(p.ownershipContract)}</Row>
         <Row label="Địa chỉ">{val(p.address)}</Row>
         <Row label="Diện tích" locked>
@@ -361,6 +385,7 @@ function LegalTab({ p, documents, onChangeDocuments }) {
       <DocumentUpload
         documents={documents}
         onChange={onChangeDocuments}
+        readOnly={!can('cell.edit')}
       />
     </div>
   );
@@ -389,7 +414,7 @@ function todayISO() {
   return `${d.getFullYear()}-${m}-${day}`;
 }
 
-function DocumentUpload({ documents, onChange }) {
+function DocumentUpload({ documents, onChange, readOnly = false }) {
   const inputRef = useRef(null);
   const [dragOver, setDragOver] = useState(false);
 
@@ -413,46 +438,57 @@ function DocumentUpload({ documents, onChange }) {
         <SectionTitle>Hồ sơ số hóa</SectionTitle>
       </div>
 
-      {/* Vùng kéo-thả */}
-      <button
-        type="button"
-        onClick={() => inputRef.current?.click()}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-          addFiles(e.dataTransfer.files);
-        }}
-        className={`flex w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors ${
-          dragOver
-            ? 'border-accent-500 bg-accent-50'
-            : 'border-line hover:border-accent-500 hover:bg-surface-2'
-        }`}
-      >
-        <FileUp className="h-7 w-7 text-accent-600" />
-        <span className="text-sm font-medium text-ink-secondary">
-          Kéo thả tệp hoặc tải lên
-        </span>
-        <span className="text-xs text-ink-muted">
-          Hỗ trợ PDF, JPG, PNG (Tối đa {MAX_FILE_MB}MB)
-        </span>
-      </button>
+      {/* Vùng kéo-thả + input — chỉ người có quyền sửa mới thấy */}
+      {!readOnly && (
+        <>
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              addFiles(e.dataTransfer.files);
+            }}
+            className={`flex w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors ${
+              dragOver
+                ? 'border-accent-500 bg-accent-50'
+                : 'border-line hover:border-accent-500 hover:bg-surface-2'
+            }`}
+          >
+            <FileUp className="h-7 w-7 text-accent-600" />
+            <span className="text-sm font-medium text-ink-secondary">
+              Kéo thả tệp hoặc tải lên
+            </span>
+            <span className="text-xs text-ink-muted">
+              Hỗ trợ PDF, JPG, PNG (Tối đa {MAX_FILE_MB}MB)
+            </span>
+          </button>
 
-      <input
-        ref={inputRef}
-        type="file"
-        multiple
-        accept=".pdf,.jpg,.jpeg,.png"
-        className="hidden"
-        onChange={(e) => {
-          addFiles(e.target.files);
-          e.target.value = ''; // cho phép chọn lại cùng tệp
-        }}
-      />
+          <input
+            ref={inputRef}
+            type="file"
+            multiple
+            accept=".pdf,.jpg,.jpeg,.png"
+            className="hidden"
+            onChange={(e) => {
+              addFiles(e.target.files);
+              e.target.value = ''; // cho phép chọn lại cùng tệp
+            }}
+          />
+        </>
+      )}
+
+      {/* Trạng thái rỗng cho người chỉ xem (không có vùng tải lên) */}
+      {readOnly && documents.length === 0 && (
+        <p className="py-4 text-center text-sm text-ink-muted">
+          Chưa có hồ sơ số hóa.
+        </p>
+      )}
 
       {/* Danh sách tệp */}
       {documents.length > 0 && (
@@ -485,15 +521,17 @@ function DocumentUpload({ documents, onChange }) {
                     .join(' · ')}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => removeAt(i)}
-                aria-label={`Xóa ${d.name}`}
-                title="Xóa"
-                className="rounded-md p-1.5 text-ink-muted transition-colors hover:bg-danger-bg hover:text-danger"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => removeAt(i)}
+                  aria-label={`Xóa ${d.name}`}
+                  title="Xóa"
+                  className="rounded-md p-1.5 text-ink-muted transition-colors hover:bg-danger-bg hover:text-danger"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
             </li>
           ))}
         </ul>

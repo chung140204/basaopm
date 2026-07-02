@@ -1,5 +1,6 @@
 import { MapPin, Eye, Pencil, EyeOff, RotateCw, FolderSearch } from 'lucide-react';
 import Badge from './Badge';
+import { useAuth } from '../auth/AuthContext';
 import {
   formatInteger,
   formatAreaFull,
@@ -58,6 +59,7 @@ export default function ProjectTable({
   onRestore,
   onClearFilters,
 }) {
+  const { can } = useAuth();
   if (projects.length === 0) {
     return (
       <div className="rounded-lg border border-line bg-surface-1 shadow-sm">
@@ -137,28 +139,34 @@ export default function ProjectTable({
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-center gap-1">
                       <IconButton icon={Eye} label="Xem chi tiết" />
-                      {isHidden ? (
-                        <IconButton
-                          icon={RotateCw}
-                          label="Khôi phục dự án"
-                          tone="accent"
-                          onClick={() => onRestore(p)}
-                        />
-                      ) : (
-                        <>
-                          <IconButton
-                            icon={Pencil}
-                            label="Sửa thông tin"
-                            onClick={() => onEdit(p)}
-                          />
-                          <IconButton
-                            icon={EyeOff}
-                            label="Ẩn dự án"
-                            tone="warning"
-                            onClick={() => onHide(p)}
-                          />
-                        </>
-                      )}
+                      {isHidden
+                        ? can('project.hide') && (
+                            <IconButton
+                              icon={RotateCw}
+                              label="Khôi phục dự án"
+                              tone="accent"
+                              onClick={() => onRestore(p)}
+                            />
+                          )
+                        : (
+                          <>
+                            {can('project.edit') && (
+                              <IconButton
+                                icon={Pencil}
+                                label="Sửa thông tin"
+                                onClick={() => onEdit(p)}
+                              />
+                            )}
+                            {can('project.hide') && (
+                              <IconButton
+                                icon={EyeOff}
+                                label="Ẩn dự án"
+                                tone="warning"
+                                onClick={() => onHide(p)}
+                              />
+                            )}
+                          </>
+                        )}
                     </div>
                   </td>
                 </tr>

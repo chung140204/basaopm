@@ -28,6 +28,7 @@ export function applyDbOverlay(geojson, cellsFC) {
     if (!cell) return f;
     const meta = {
       cellCode: cell.cellCode,
+      lotCode: cell.lotCode, // để lọc theo Khu A/B (suy zone từ mã lô)
       businessStatus: cell.businessStatus,
       paymentStatus: cell.paymentStatus ?? 'unpaid',
       collateralStatus: cell.collateralStatus ?? 'none',
@@ -39,7 +40,6 @@ export function applyDbOverlay(geojson, cellsFC) {
       properties: {
         ...(f.properties || {}),
         So_thua: cell.cellCode,
-        Dien_tich: cell.area,
       },
     };
   });

@@ -6,10 +6,9 @@ import { formatCurrency, formatDate } from '../../utils/format';
 import {
   paymentProgress,
   mortgageStatusLabel,
-  derivePaymentStages,
-  PAYMENT_STAGE_TONE,
 } from '../../utils/payment';
 import { Card, Row, SectionTitle, StatusBadge, val } from './cellDetailUi';
+import { useAuth } from '../../auth/AuthContext';
 
 // Mã ngắn của ô để gắn vào nhãn "Đợt N - <mã>" (phần sau '-' cuối, hoặc cả mã).
 function shortCellCode(cellCode) {
@@ -19,6 +18,7 @@ function shortCellCode(cellCode) {
 }
 
 export default function PaymentPanel({ p }) {
+  const { can } = useAuth();
   const c = p.contract;
   const payments = p.payments || [];
   const m = p.mortgage;
@@ -35,9 +35,6 @@ export default function PaymentPanel({ p }) {
           percent: totalDue > 0 ? Math.min(100, (p.paid / totalDue) * 100) : 0,
         }
       : paymentProgress(totalDue, payments);
-
-  // Nhãn trạng thái suy ra cho từng đợt (đặt cọc / một phần / hoàn tất).
-  const stages = derivePaymentStages(payments, totalDue);
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
@@ -111,36 +108,32 @@ export default function PaymentPanel({ p }) {
       <Card>
         <div className="mb-2 flex items-center justify-between">
           <SectionTitle>Lộ trình thanh toán chi tiết</SectionTitle>
-          <button
-            type="button"
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-accent-600 hover:bg-accent-50"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Ghi nhận thanh toán
-          </button>
+          {can('cell.edit') && (
+            <button
+              type="button"
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-accent-600 hover:bg-accent-50"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Ghi nhận thanh toán
+            </button>
+          )}
         </div>
         {payments.length === 0 ? (
           <p className="py-2 text-sm text-ink-muted">— chưa có lần thanh toán nào —</p>
         ) : (
           <ul className="divide-y divide-line">
-            {payments.map((pay, i) => (
-              <li key={i} className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 py-2.5">
-                {/* Cột trái: nhãn đợt + badge trạng thái suy ra */}
+            {/* Stack: đợt MỚI NHẤT lên trên (đảo thứ tự hiển thị), nhưng số
+                "Đợt N" vẫn theo thứ tự thời gian gốc. */}
+            {payments
+              .map((pay, i) => ({ pay, n: i + 1 }))
+              .reverse()
+              .map(({ pay, n }) => (
+              <li key={n} className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 py-2.5">
+                {/* Cột trái: nhãn đợt (bỏ badge trạng thái suy ra theo yêu cầu). */}
                 <div className="flex flex-col gap-1">
                   <span className="text-sm font-medium text-ink-primary">
-                    Đợt {i + 1} · {shortCellCode(p.cellCode)}
+                    Đợt {n} · {shortCellCode(p.cellCode)}
                   </span>
-                  {/* Ẩn badge đợt đầu (Đặt cọc); giữ Hoàn tất / Thanh toán một phần. */}
-                  {stages[i]?.key !== 'deposit' && (
-                    <span
-                      className={`inline-flex w-fit rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
-                        PAYMENT_STAGE_TONE[stages[i]?.key] ??
-                        PAYMENT_STAGE_TONE.partial
-                      }`}
-                    >
-                      {stages[i]?.label}
-                    </span>
-                  )}
                 </div>
                 {/* Cột phải: số tiền + ngày */}
                 <div className="text-right">
@@ -183,6 +176,7 @@ export default function PaymentPanel({ p }) {
             )}
           </span>
         </div>
+        {m?.borrower && <Row label="Bên đứng tên vay">{m.borrower}</Row>}
         <Row label="Tổ chức nhận thế chấp">{val(m?.lender)}</Row>
         <Row label="Mục đích thế chấp">{val(m?.purpose)}</Row>
         <Row label="Giá trị khoản vay">

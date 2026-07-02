@@ -179,11 +179,9 @@ export default function RanhThuaSearch({
                             ? `Thửa ${item.properties.So_thua}`
                             : `Thửa #${item.id}`)}
                       </span>
-                      {item.properties?.Dien_tich != null && (
+                      {item.meta?.areaExcel != null && (
                         <span className="ml-auto text-xs text-ink-muted tabular">
-                          {Number(item.properties.Dien_tich).toLocaleString(
-                            'vi-VN'
-                          )}{' '}
+                          {Number(item.meta.areaExcel).toLocaleString('vi-VN')}{' '}
                           m²
                         </span>
                       )}

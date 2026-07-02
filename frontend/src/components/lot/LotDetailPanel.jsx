@@ -1,9 +1,12 @@
-import { X, Pencil, Maximize2, Grid3x3, MapPin, ChevronRight } from 'lucide-react';
+import { useState } from 'react';
+import { X, Pencil, Maximize2, Grid3x3, MapPin, ChevronRight, CheckSquare, ListChecks } from 'lucide-react';
 import LotShape from './LotShape';
 import { AreaBreakdownList } from './AreaBreakdownBar';
 import { labelFor, getLayer } from '../../lib/layers';
 import { formatM2 } from '../../utils/format';
 import ResponsiveSidePanel from '../common/ResponsiveSidePanel';
+import { useAuth } from '../../auth/AuthContext';
+import BulkUpdateCellsModal from './BulkUpdateCellsModal';
 
 function colorOf(layerId, value) {
   return getLayer(layerId).statuses.find((s) => s.value === value)?.fill ?? '#94A3B8';
@@ -21,7 +24,40 @@ function Stat({ icon: Icon, label, value }) {
   );
 }
 
-export default function LotDetailPanel({ lot, onClose, onEdit, onOpenCell }) {
+export default function LotDetailPanel({ lot, onClose, onEdit, onOpenCell, onBulkUpdateCells }) {
+  const { can } = useAuth();
+  // Chế độ chọn nhiều ô con để cập nhật hàng loạt (chỉ khi có quyền + handler).
+  const canBulk = can('cell.edit') && typeof onBulkUpdateCells === 'function';
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState(() => new Set()); // Set<cellCode>
+  const [bulkOpen, setBulkOpen] = useState(false);
+
+  const cellCodes = lot.cells.map((c) => c.properties.cellCode);
+  const allSelected = selected.size > 0 && selected.size === cellCodes.length;
+
+  const toggleCell = (code) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+
+  const toggleAll = () =>
+    setSelected(allSelected ? new Set() : new Set(cellCodes));
+
+  const exitSelecting = () => {
+    setSelecting(false);
+    setSelected(new Set());
+  };
+
+  // Áp trạng thái mới cho các ô đã chọn → đẩy lên LotListScreen (lưu DB).
+  const applyBulk = async ({ prop, apiKey, value }) => {
+    await onBulkUpdateCells(lot, [...selected], { prop, apiKey, value });
+    setBulkOpen(false);
+    exitSelecting();
+  };
+
   return (
     <ResponsiveSidePanel onClose={onClose} widthClass="md:w-[380px]">
       {/* Header */}
@@ -65,15 +101,23 @@ export default function LotDetailPanel({ lot, onClose, onEdit, onOpenCell }) {
             <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
               Diện tích theo pháp lý định danh
             </p>
-            <AreaBreakdownList layerId="legal" data={lot.areaByLegal} />
+            <AreaBreakdownList layerId="legal" data={lot.areaByLegal} textOnly />
           </div>
           <div>
             <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
               Diện tích theo pháp lý - tài chính
             </p>
-            <AreaBreakdownList layerId="payment" data={lot.areaByPayment} />
+            <AreaBreakdownList layerId="payment" data={lot.areaByPayment} textOnly />
           </div>
         </div>
+
+        {/* Ghi chú: màu ô con chỉ theo tình trạng kinh doanh; các nhóm pháp lý
+            chỉ là số liệu thống kê text (không gắn màu). */}
+        <p className="mt-3 rounded-md bg-surface-2 px-3 py-2 text-[11px] leading-relaxed text-ink-muted">
+          Màu các ô đất con chỉ thể hiện theo tình trạng kinh doanh. Các nhóm
+          pháp lý định danh và pháp lý - tài chính chỉ hiển thị dạng thống kê
+          text.
+        </p>
 
         {/* Description / note */}
         <div className="mt-4 space-y-2">
@@ -97,13 +141,51 @@ export default function LotDetailPanel({ lot, onClose, onEdit, onOpenCell }) {
 
         {/* Child cells */}
         <div className="mt-4">
-          <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
-            <MapPin className="h-3.5 w-3.5" />
-            Các ô đất con
-          </p>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
+              <MapPin className="h-3.5 w-3.5" />
+              Các ô đất con
+            </p>
+            {/* Bật chế độ chọn nhiều ô để cập nhật hàng loạt (cần quyền sửa). */}
+            {canBulk &&
+              (selecting ? (
+                <button
+                  type="button"
+                  onClick={exitSelecting}
+                  className="text-[11px] font-medium text-ink-muted hover:text-ink-primary"
+                >
+                  Hủy chọn
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setSelecting(true)}
+                  className="flex items-center gap-1 text-[11px] font-medium text-accent-600 hover:text-accent-700"
+                >
+                  <ListChecks className="h-3.5 w-3.5" />
+                  Chọn nhiều
+                </button>
+              ))}
+          </div>
+
+          {/* Thanh chọn tất cả — chỉ hiện khi đang ở chế độ chọn. */}
+          {canBulk && selecting && (
+            <button
+              type="button"
+              onClick={toggleAll}
+              className="mb-1.5 flex items-center gap-2 text-xs font-medium text-ink-secondary hover:text-ink-primary"
+            >
+              <CheckSquare
+                className={`h-4 w-4 ${allSelected ? 'text-accent-600' : 'text-ink-muted'}`}
+              />
+              {allSelected ? 'Bỏ chọn tất cả' : 'Chọn tất cả'} ({selected.size}/{cellCodes.length})
+            </button>
+          )}
+
           <ul className="space-y-1.5">
             {lot.cells.map((c) => {
               const p = c.properties;
+              const isChecked = selected.has(p.cellCode);
               const dot = (
                 <span
                   className="h-2.5 w-2.5 flex-shrink-0 rounded-sm"
@@ -118,6 +200,34 @@ export default function LotDetailPanel({ lot, onClose, onEdit, onOpenCell }) {
                   </span>
                 </span>
               );
+
+              // Chế độ chọn nhiều: cả dòng là checkbox toggle (không mở chi tiết).
+              if (selecting) {
+                return (
+                  <li key={c.id}>
+                    <label
+                      className={`flex w-full cursor-pointer items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${
+                        isChecked
+                          ? 'border-accent-500 bg-accent-50'
+                          : 'border-line hover:bg-surface-2'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleCell(p.cellCode)}
+                          className="accent-accent-600"
+                        />
+                        {dot}
+                        <span className="font-medium text-ink-primary">{p.cellCode}</span>
+                      </span>
+                      {meta}
+                    </label>
+                  </li>
+                );
+              }
+
               // Click → mở chi tiết ô ở màn Quản lý theo ô (nếu được nối handler).
               if (onOpenCell) {
                 return (
@@ -157,17 +267,42 @@ export default function LotDetailPanel({ lot, onClose, onEdit, onOpenCell }) {
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="border-t border-line p-3">
-        <button
-          type="button"
-          onClick={() => onEdit(lot)}
-          className="flex w-full items-center justify-center gap-2 rounded-md bg-accent-600 py-2 text-sm font-medium text-white hover:bg-accent-700"
-        >
-          <Pencil className="h-4 w-4" />
-          Cập nhật thông tin lô
-        </button>
-      </div>
+      {/* Footer — ưu tiên thanh cập nhật hàng loạt khi đang chọn ô. */}
+      {canBulk && selecting ? (
+        <div className="border-t border-line p-3">
+          <button
+            type="button"
+            onClick={() => setBulkOpen(true)}
+            disabled={selected.size === 0}
+            className="flex w-full items-center justify-center gap-2 rounded-md bg-accent-600 py-2 text-sm font-medium text-white hover:bg-accent-700 disabled:opacity-50"
+          >
+            <ListChecks className="h-4 w-4" />
+            Cập nhật {selected.size} ô đã chọn
+          </button>
+        </div>
+      ) : (
+        can('lot.edit') && (
+          <div className="border-t border-line p-3">
+            <button
+              type="button"
+              onClick={() => onEdit(lot)}
+              className="flex w-full items-center justify-center gap-2 rounded-md bg-accent-600 py-2 text-sm font-medium text-white hover:bg-accent-700"
+            >
+              <Pencil className="h-4 w-4" />
+              Cập nhật thông tin lô
+            </button>
+          </div>
+        )
+      )}
+
+      {/* Modal cập nhật hàng loạt */}
+      {bulkOpen && (
+        <BulkUpdateCellsModal
+          cellCodes={[...selected]}
+          onClose={() => setBulkOpen(false)}
+          onApply={applyBulk}
+        />
+      )}
     </ResponsiveSidePanel>
   );
 }
